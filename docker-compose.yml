@@ -1,0 +1,20 @@
+services:
+  film-subtitle-lab:
+    build:
+      context: .
+    image: film-subtitle-lab:cuda128
+    ports:
+      - "7860:7860"
+    gpus: all
+    shm_size: "8gb"
+    environment:
+      HF_HOME: /models/huggingface
+      TORCH_HOME: /models/torch
+      XDG_CACHE_HOME: /models
+      NVIDIA_VISIBLE_DEVICES: all
+      NVIDIA_DRIVER_CAPABILITIES: compute,utility
+      ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
+      ELEVENLABS_STT_MODEL: ${ELEVENLABS_STT_MODEL:-scribe_v2}
+    volumes:
+      - ./data/jobs:/data/jobs
+      - ./data/models:/models

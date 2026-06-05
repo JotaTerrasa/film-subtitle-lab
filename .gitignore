@@ -1,0 +1,36 @@
+# Runtime data
+data/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local environments
+.venv/
+venv/
+env/
+.env
+.env.*
+!.env.example
+
+# Build and package artifacts
+*.zip
+*.tar
+*.tar.gz
+*.7z
+dist/
+build/
+
+# Logs
+*.log
+logs/
+
+# OS/editor metadata
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
