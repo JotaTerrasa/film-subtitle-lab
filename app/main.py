@@ -45,25 +45,33 @@ WHISPERX_ENGLISH_QUALITY_ARGS = [
     "--temperature",
     "0",
     "--beam_size",
-    "7",
+    "10",
     "--patience",
-    "1.0",
+    "2.0",
     "--condition_on_previous_text",
     "False",
+    "--temperature_increment_on_fallback",
+    "0",
     "--compression_ratio_threshold",
-    "2.2",
+    "2.4",
     "--logprob_threshold",
-    "-0.8",
+    "-1.0",
     "--no_speech_threshold",
-    "0.65",
+    "0.75",
+    "--vad_method",
+    "pyannote",
+    "--vad_onset",
+    "0.35",
+    "--vad_offset",
+    "0.25",
     "--chunk_size",
-    "20",
+    "30",
     "--interpolate_method",
     "linear",
 ]
 
 PROVIDER_STEPS = {
-    "whisperx": ["queued", "prepare", "vad", "transcribe", "align", "export", "done"],
+    "whisperx": ["queued", "prepare", "audio", "vad", "transcribe", "align", "export", "done"],
     "elevenlabs": ["queued", "prepare", "upload", "remote", "export", "done"],
 }
 
@@ -75,6 +83,10 @@ STAGE_COPY = {
     "prepare": (
         "Preparando la transcripcion",
         "El backend esta configurando modelo, GPU/cache, idioma y carpetas de salida.",
+    ),
+    "audio": (
+        "Preparando audio",
+        "La app esta extrayendo una pista mono, normalizada y optimizada para reconocimiento de voz.",
     ),
     "vad": (
         "Detectando voz",
@@ -696,6 +708,44 @@ def write_elevenlabs_outputs(job: Dict[str, Any], payload: Dict[str, Any]) -> Di
     }
 
 
+def prepare_audio_for_local_stt(job_id: str, source_path: Path) -> Path:
+    work_dir = job_dir(job_id) / "working"
+    work_dir.mkdir(parents=True, exist_ok=True)
+    target = work_dir / f"{source_path.stem}.stt.wav"
+    audio_filter = "highpass=f=80,lowpass=f=7600,loudnorm=I=-16:TP=-1.5:LRA=11"
+    cmd = [
+        "ffmpeg",
+        "-y",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        str(source_path),
+        "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        "16000",
+        "-af",
+        audio_filter,
+        str(target),
+    ]
+
+    set_stage(
+        job_id,
+        "audio",
+        "Extrayendo audio mono 16 kHz y normalizando niveles para que WhisperX reciba una senal mas limpia.",
+    )
+    append_log(job_id, "+ " + " ".join(cmd))
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    if result.stdout:
+        append_log(job_id, result.stdout)
+    if result.returncode != 0 or not target.exists():
+        append_log(job_id, "WARNING: audio preprocessing failed; falling back to the original media file.")
+        return source_path
+    return target
+
+
 def run_whisperx_transcription(job_id: str) -> None:
     job = jobs[job_id]
     output_dir = Path(job["output_dir"])
@@ -709,10 +759,20 @@ def run_whisperx_transcription(job_id: str) -> None:
             "XDG_CACHE_HOME": str(MODEL_DIR),
         }
     )
+    set_job(job_id, status="running", started_at=now_iso())
+    set_stage(
+        job_id,
+        "prepare",
+        f"Cargando WhisperX local ({job['model']}, {job['compute_type']}) y preparando la RTX para transcribir.",
+    )
+    source_audio = Path(job["video_path"])
+    stt_audio = prepare_audio_for_local_stt(job_id, source_audio)
+    job["stt_audio_path"] = str(stt_audio)
+    write_job(job)
 
     cmd = [
         "whisperx",
-        job["video_path"],
+        str(stt_audio),
         "--model",
         job["model"],
         "--device",
@@ -741,12 +801,7 @@ def run_whisperx_transcription(job_id: str) -> None:
     if job["language"] != "auto":
         cmd.extend(["--language", job["language"]])
 
-    set_job(job_id, status="running", started_at=now_iso(), command=cmd)
-    set_stage(
-        job_id,
-        "prepare",
-        f"Cargando WhisperX local ({job['model']}, {job['compute_type']}) y preparando la RTX para transcribir.",
-    )
+    set_job(job_id, command=cmd)
     append_log(job_id, "+ " + " ".join(cmd))
 
     start = time.time()
@@ -939,9 +994,9 @@ async def create_job(
     elevenlabs_model: str = Form("scribe_v2"),
     elevenlabs_timestamps: str = Form("word"),
     elevenlabs_num_speakers: Optional[int] = Form(None),
-    elevenlabs_temperature: Optional[float] = Form(None),
-    elevenlabs_seed: Optional[int] = Form(None),
-    elevenlabs_diarize: bool = Form(False),
+    elevenlabs_temperature: Optional[float] = Form(0.0),
+    elevenlabs_seed: Optional[int] = Form(42),
+    elevenlabs_diarize: bool = Form(True),
     elevenlabs_tag_audio_events: bool = Form(False),
     elevenlabs_no_verbatim: bool = Form(True),
     elevenlabs_keyterms: str = Form(""),

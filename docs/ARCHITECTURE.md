@@ -80,15 +80,17 @@ Local WhisperX:
 
 - Runs in the Docker container.
 - Uses CUDA and the workstation GPU.
+- Extracts local media to normalized mono 16 kHz WAV before transcription.
 - Produces WhisperX native outputs directly.
 - Exposes word timings from `word_segments` or `segments[].words`.
-- Applies an English quality profile with deterministic decoding, larger beam search, disabled previous-text conditioning, stricter hallucination thresholds, and smaller chunks when `language=en`.
+- Applies an English quality profile with deterministic decoding, larger beam search, disabled previous-text conditioning, sensitive VAD, stricter no-speech handling, and linear interpolation when `language=en`.
 
 ElevenLabs:
 
 - Requires `ELEVENLABS_API_KEY` in the container environment.
 - Sends the uploaded media file to `https://api.elevenlabs.io/v1/speech-to-text`.
 - Uses the UI-selected Scribe model, timestamp granularity, diarization, speaker count, audio event, no-verbatim, temperature, seed, and keyterm options.
+- Defaults to `scribe_v2`, word timestamps, diarization on, clean filler on, temperature `0`, and seed `42`.
 - Converts the returned word timestamps into local SRT, VTT, JSON, TXT, and TSV outputs.
 - Exposes returned word timings through the same frontend table as WhisperX.
 

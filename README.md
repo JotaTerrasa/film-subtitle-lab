@@ -172,11 +172,13 @@ The local provider uses the UI's Whisper model, batch size, and compute type con
 For English jobs, the backend also applies an accuracy-oriented WhisperX profile by default:
 
 - `large-v3`, English, `float16`, batch `8`.
+- Local audio is first extracted to mono 16 kHz WAV and level-normalized for cleaner speech recognition.
 - Deterministic decoding with temperature `0`.
-- Beam search increased to `7`.
+- Beam search increased to `10` with patience `2.0`.
 - Previous-text conditioning disabled to reduce repeated or hallucinated phrases.
-- Stricter compression/log-probability/no-speech thresholds to reduce strange text in silence.
-- Smaller `20s` chunks and linear interpolation for more stable subtitle timing.
+- Sensitive VAD settings for quiet film dialogue.
+- Higher no-speech threshold and no random fallback sampling to reduce strange text in silence.
+- Linear interpolation for more stable subtitle timing.
 
 ### ElevenLabs
 
@@ -193,6 +195,8 @@ When `ElevenLabs API` is selected, the UI switches away from local WhisperX cont
 - Optional keyterms for names, places, and technical vocabulary.
 
 `Clean filler` maps to ElevenLabs `no_verbatim` and is only sent when `scribe_v2` is selected.
+
+The default ElevenLabs preset is `scribe_v2`, word timestamps, diarization on, audio events off, clean filler on, temperature `0`, and seed `42`.
 
 Before starting the app, set your API key in the PowerShell session:
 
