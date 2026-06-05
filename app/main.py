@@ -453,6 +453,36 @@ def load_json_payload(path: Optional[Path]) -> Dict[str, Any]:
         return {}
 
 
+def format_elevenlabs_error(response: requests.Response) -> str:
+    base = f"ElevenLabs returned HTTP {response.status_code}"
+    try:
+        payload = response.json()
+    except Exception:
+        body = response.text.strip()
+        return f"{base}: {body[:500]}" if body else base
+
+    detail = payload.get("detail") if isinstance(payload, dict) else None
+    status = ""
+    message = ""
+    if isinstance(detail, dict):
+        status = str(detail.get("status") or "")
+        message = str(detail.get("message") or "")
+    elif isinstance(detail, str):
+        message = detail
+    elif isinstance(payload, dict):
+        status = str(payload.get("status") or "")
+        message = str(payload.get("message") or payload.get("error") or "")
+
+    if status == "missing_permissions" and "speech_to_text" in message:
+        return (
+            "ElevenLabs API key is missing the speech_to_text permission. "
+            "Edit or recreate the key in ElevenLabs with Speech to Text access enabled."
+        )
+
+    parts = [part for part in [status, message] if part]
+    return f"{base}: {' - '.join(parts)}" if parts else base
+
+
 def write_elevenlabs_outputs(job: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, str]:
     output_dir = Path(job["output_dir"])
     stem = Path(job["video_path"]).stem
@@ -621,8 +651,10 @@ def run_elevenlabs_transcription(job_id: str) -> None:
         elapsed = round(time.time() - start, 2)
         append_log(job_id, f"ElevenLabs response: HTTP {response.status_code}")
         if response.status_code >= 400:
+            error_message = format_elevenlabs_error(response)
+            append_log(job_id, error_message)
             append_log(job_id, response.text[:2000])
-            set_job(job_id, status="error", error=f"ElevenLabs returned HTTP {response.status_code}", elapsed_sec=elapsed)
+            set_job(job_id, status="error", error=error_message, elapsed_sec=elapsed)
             return
 
         payload = response.json()
