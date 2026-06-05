@@ -37,6 +37,29 @@ executor = ThreadPoolExecutor(max_workers=1)
 jobs_lock = threading.Lock()
 jobs: Dict[str, Dict[str, Any]] = {}
 
+WHISPERX_ENGLISH_QUALITY_ARGS = [
+    "--task",
+    "transcribe",
+    "--temperature",
+    "0",
+    "--beam_size",
+    "7",
+    "--patience",
+    "1.0",
+    "--condition_on_previous_text",
+    "False",
+    "--compression_ratio_threshold",
+    "2.2",
+    "--logprob_threshold",
+    "-0.8",
+    "--no_speech_threshold",
+    "0.65",
+    "--chunk_size",
+    "20",
+    "--interpolate_method",
+    "linear",
+]
+
 
 @app.middleware("http")
 async def basic_auth(request: Request, call_next):
@@ -559,6 +582,9 @@ def run_whisperx_transcription(job_id: str) -> None:
         "True",
     ]
 
+    if job["language"] in {"en", "English"}:
+        cmd.extend(WHISPERX_ENGLISH_QUALITY_ARGS)
+
     if job["language"] != "auto":
         cmd.extend(["--language", job["language"]])
 
@@ -700,7 +726,7 @@ async def create_job(
     stt_provider: str = Form("whisperx"),
     language: str = Form("en"),
     model: str = Form("large-v3"),
-    batch_size: int = Form(16),
+    batch_size: int = Form(8),
     compute_type: str = Form("float16"),
 ) -> Dict[str, Any]:
     if not video.filename:

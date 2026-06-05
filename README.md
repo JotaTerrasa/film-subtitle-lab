@@ -168,6 +168,15 @@ Use this when:
 
 The local provider uses the UI's Whisper model, batch size, and compute type controls.
 
+For English jobs, the backend also applies an accuracy-oriented WhisperX profile by default:
+
+- `large-v3`, English, `float16`, batch `8`.
+- Deterministic decoding with temperature `0`.
+- Beam search increased to `7`.
+- Previous-text conditioning disabled to reduce repeated or hallucinated phrases.
+- Stricter compression/log-probability/no-speech thresholds to reduce strange text in silence.
+- Smaller `20s` chunks and linear interpolation for more stable subtitle timing.
+
 ### ElevenLabs
 
 The ElevenLabs provider uploads the media file from the backend container to the ElevenLabs Speech to Text API and converts the response into the same SRT, VTT, JSON, TXT, TSV, and frontend word timestamp views used by the local provider.

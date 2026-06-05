@@ -80,6 +80,7 @@ Local WhisperX:
 - Uses CUDA and the workstation GPU.
 - Produces WhisperX native outputs directly.
 - Exposes word timings from `word_segments` or `segments[].words`.
+- Applies an English quality profile with deterministic decoding, larger beam search, disabled previous-text conditioning, stricter hallucination thresholds, and smaller chunks when `language=en`.
 
 ElevenLabs:
 
