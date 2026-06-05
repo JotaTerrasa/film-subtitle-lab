@@ -200,10 +200,33 @@
               </div>
             </div>
           </div>
+          <div class="compare-explainer" aria-label="Subtitle comparison guide">
+            <div>
+              <strong data-i18n="compareGeneratedLabel">Nuevo STT</strong>
+              <span id="providerExplain">Generado por WhisperX local o ElevenLabs.</span>
+            </div>
+            <div>
+              <strong data-i18n="compareOriginalLabel">Original sincronizado</strong>
+              <span data-i18n="compareOriginalHint">Texto del SRT/VTT subido, retimado con timestamps por palabra si es posible.</span>
+            </div>
+            <div>
+              <strong data-i18n="compareMatchLabel">Badge match</strong>
+              <span data-i18n="compareMatchHint">MATCH OK encaja; +/- ms marca desfase; solo STT/original indica que no hay pareja.</span>
+            </div>
+          </div>
           <div class="cue-grid-head">
-            <span data-i18n="time">Tiempo</span>
-            <span data-i18n="newSubtitles">Nuevo</span>
-            <span data-i18n="originalSubtitles">Original</span>
+            <span>
+              <strong data-i18n="timeMatchColumn">Tiempo + match</strong>
+              <small data-i18n="timeMatchColumnHint">Estado del emparejado</small>
+            </span>
+            <span>
+              <strong data-i18n="newSttColumn">STT nuevo</strong>
+              <small data-i18n="newSttColumnHint">WhisperX local / ElevenLabs</small>
+            </span>
+            <span>
+              <strong data-i18n="syncedOriginalColumn">Original sync</strong>
+              <small data-i18n="syncedOriginalColumnHint">SRT/VTT subido</small>
+            </span>
           </div>
           <div class="cue-grid" id="cueGrid"></div>
           <div class="word-panel">
