@@ -55,8 +55,6 @@ WHISPERX_ENGLISH_QUALITY_ARGS = [
     "2.0",
     "--condition_on_previous_text",
     "False",
-    "--temperature_increment_on_fallback",
-    "0",
     "--compression_ratio_threshold",
     "2.4",
     "--logprob_threshold",
