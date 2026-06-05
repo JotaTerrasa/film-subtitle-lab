@@ -10,6 +10,13 @@ const state = {
   merged: [],
   downloads: {},
   alignment: {},
+  waveform: {
+    status: "idle",
+    peaks: [],
+    duration: 0,
+    url: "",
+    error: "",
+  },
   activeWordIndex: -1,
   autoOffsetSec: 0,
   referenceOffsetSec: 0,
@@ -42,6 +49,9 @@ const cueGrid = document.getElementById("cueGrid");
 const wordGrid = document.getElementById("wordGrid");
 const wordCount = document.getElementById("wordCount");
 const downloadRow = document.getElementById("downloadRow");
+const waveformCanvas = document.getElementById("waveformCanvas");
+const waveformStatus = document.getElementById("waveformStatus");
+const matchSummary = document.getElementById("matchSummary");
 const sttProvider = document.getElementById("sttProvider");
 const localControls = document.getElementById("localControls");
 const elevenlabsControls = document.getElementById("elevenlabsControls");
@@ -108,6 +118,19 @@ const I18N = {
     stageFallback: "La transcripcion esta en curso.",
     autoOffset: "Offset auto",
     matches: "coincidencias",
+    matchTimeline: "Match visual",
+    matchWaiting: "Esperando resultados",
+    matchedSubtitles: "Match",
+    matchSummary: "{matched} matches · {coverage}% cobertura · {delta} ms delta medio",
+    matchNoReference: "Sin subtitulos originales para comparar",
+    matchNoCues: "Sin subtitulos generados todavia",
+    matchNewOnly: "solo nuevo",
+    matchOriginalOnly: "solo original",
+    matchGood: "match",
+    waveformWaiting: "La onda aparecera cuando termine la transcripcion.",
+    waveformLoading: "Generando onda de sonido desde el audio...",
+    waveformReady: "Onda lista. Los bloques de abajo muestran como encajan los subtitulos.",
+    waveformUnavailable: "No se pudo generar la onda, pero puedes revisar los carriles de subtitulos.",
     "status.done": "Completado",
     "status.error": "Error",
     "status.running": "Trabajando",
@@ -206,6 +229,19 @@ const I18N = {
     stageFallback: "Transcription is in progress.",
     autoOffset: "Auto offset",
     matches: "matches",
+    matchTimeline: "Visual match",
+    matchWaiting: "Waiting for results",
+    matchedSubtitles: "Match",
+    matchSummary: "{matched} matches · {coverage}% coverage · {delta} ms avg delta",
+    matchNoReference: "No original subtitles to compare",
+    matchNoCues: "No generated subtitles yet",
+    matchNewOnly: "new only",
+    matchOriginalOnly: "original only",
+    matchGood: "match",
+    waveformWaiting: "The waveform will appear when transcription finishes.",
+    waveformLoading: "Generating sound waveform from the audio...",
+    waveformReady: "Waveform ready. The lanes below show how subtitles line up.",
+    waveformUnavailable: "Could not generate the waveform, but the subtitle lanes are still available.",
     "status.done": "Done",
     "status.error": "Error",
     "status.running": "Working",
@@ -371,6 +407,7 @@ function resetAll() {
   state.merged = [];
   state.downloads = {};
   state.alignment = {};
+  state.waveform = { status: "idle", peaks: [], duration: 0, url: "", error: "" };
   state.activeWordIndex = -1;
   state.autoOffsetSec = 0;
   state.referenceOffsetSec = 0;
@@ -382,6 +419,9 @@ function resetAll() {
   stagePanel.hidden = true;
   reviewLayout.hidden = true;
   renderSelection();
+  renderMatchSummary();
+  renderWaveformStatus();
+  drawWaveformTimeline();
 }
 
 dropZone.addEventListener("dragover", (event) => {
@@ -536,6 +576,13 @@ async function loadResult() {
   state.referenceRaw = result.reference_cues || [];
   state.downloads = result.downloads || {};
   state.alignment = result.alignment || {};
+  state.waveform = {
+    status: "idle",
+    peaks: [],
+    duration: 0,
+    url: result.waveform_url || "",
+    error: "",
+  };
   state.activeWordIndex = -1;
   state.autoOffsetSec = Number(result.alignment?.offset_sec || 0);
   state.referenceOffsetSec = state.autoOffsetSec;
@@ -548,7 +595,11 @@ async function loadResult() {
   renderDownloads(state.downloads, state.alignment);
   renderCueGrid();
   renderWordGrid();
+  renderMatchSummary();
+  renderWaveformStatus();
   reviewLayout.hidden = false;
+  drawWaveformTimeline();
+  loadWaveform(state.waveform.url);
   startButton.disabled = false;
 }
 
@@ -570,6 +621,8 @@ function rerenderWithOffset() {
   applyReferenceTiming();
   state.merged = mergeCues(state.generated, state.reference);
   renderCueGrid();
+  renderMatchSummary();
+  drawWaveformTimeline();
   updateActive();
 }
 
@@ -592,6 +645,241 @@ function renderDownloads(downloads, alignment) {
     link.download = "";
     downloadRow.appendChild(link);
   });
+}
+
+function maxTimelineDuration() {
+  const cueEnd = [...state.generated, ...state.reference].reduce((max, cue) => Math.max(max, Number(cue.end) || 0), 0);
+  const mediaDuration = Number(videoPlayer.duration);
+  const waveformDuration = Number(state.waveform.duration);
+  return Math.max(1, cueEnd, Number.isFinite(mediaDuration) ? mediaDuration : 0, waveformDuration || 0);
+}
+
+function computeMatchMetrics() {
+  const matched = state.merged.filter((row) => row.generated && row.reference);
+  const total = Math.max(state.generated.length, state.reference.length, 1);
+  const deltas = matched.map((row) => {
+    const generatedMid = (row.generated.start + row.generated.end) / 2;
+    const referenceMid = (row.reference.start + row.reference.end) / 2;
+    return Math.abs(generatedMid - referenceMid) * 1000;
+  });
+  const avgDelta = deltas.length ? deltas.reduce((sum, value) => sum + value, 0) / deltas.length : 0;
+  return {
+    matched: matched.length,
+    total,
+    coverage: Math.round((matched.length / total) * 100),
+    avgDelta: Math.round(avgDelta),
+  };
+}
+
+function renderMatchSummary() {
+  if (!matchSummary) return;
+  if (!state.generated.length) {
+    matchSummary.textContent = t("matchNoCues");
+    return;
+  }
+  if (!state.reference.length) {
+    matchSummary.textContent = t("matchNoReference");
+    return;
+  }
+  const metrics = computeMatchMetrics();
+  matchSummary.textContent = t("matchSummary", {
+    matched: metrics.matched,
+    coverage: metrics.coverage,
+    delta: metrics.avgDelta,
+  });
+}
+
+function matchInfo(row) {
+  if (row.generated && row.reference) {
+    const generatedMid = (row.generated.start + row.generated.end) / 2;
+    const referenceMid = (row.reference.start + row.reference.end) / 2;
+    const deltaMs = Math.round((generatedMid - referenceMid) * 1000);
+    const absDelta = Math.abs(deltaMs);
+    return {
+      kind: absDelta <= 250 ? "good" : absDelta <= 750 ? "drift" : "off",
+      label: absDelta <= 250 ? t("matchGood") : `${deltaMs > 0 ? "+" : ""}${deltaMs}ms`,
+    };
+  }
+  if (row.generated) return { kind: "new-only", label: t("matchNewOnly") };
+  return { kind: "original-only", label: t("matchOriginalOnly") };
+}
+
+function renderWaveformStatus() {
+  if (!waveformStatus) return;
+  if (state.waveform.status === "loading") waveformStatus.textContent = t("waveformLoading");
+  else if (state.waveform.status === "ready") waveformStatus.textContent = t("waveformReady");
+  else if (state.waveform.status === "error") waveformStatus.textContent = t("waveformUnavailable");
+  else waveformStatus.textContent = t("waveformWaiting");
+}
+
+async function loadWaveform(url) {
+  if (!url) return;
+  state.waveform = { status: "loading", peaks: [], duration: 0, url, error: "" };
+  renderWaveformStatus();
+  drawWaveformTimeline();
+  try {
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(await response.text());
+    const payload = await response.json();
+    state.waveform = {
+      status: "ready",
+      peaks: Array.isArray(payload.peaks) ? payload.peaks : [],
+      duration: Number(payload.duration) || 0,
+      url,
+      error: "",
+    };
+  } catch (error) {
+    state.waveform = {
+      status: "error",
+      peaks: [],
+      duration: 0,
+      url,
+      error: String(error.message || error),
+    };
+  }
+  renderWaveformStatus();
+  drawWaveformTimeline();
+}
+
+function cueX(seconds, width, duration, inset) {
+  return inset + (Math.max(0, Number(seconds) || 0) / duration) * (width - inset * 2);
+}
+
+function drawRoundedRect(ctx, x, y, width, height, radius) {
+  const r = Math.min(radius, height / 2, Math.max(0, width) / 2);
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.lineTo(x + width - r, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + r);
+  ctx.lineTo(x + width, y + height - r);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - r, y + height);
+  ctx.lineTo(x + r, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - r);
+  ctx.lineTo(x, y + r);
+  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawWaveformTimeline() {
+  if (!waveformCanvas) return;
+  const ctx = waveformCanvas.getContext("2d");
+  if (!ctx) return;
+
+  const ratio = window.devicePixelRatio || 1;
+  const cssWidth = Math.max(320, waveformCanvas.clientWidth || 720);
+  const cssHeight = Math.max(170, waveformCanvas.clientHeight || 190);
+  if (waveformCanvas.width !== Math.round(cssWidth * ratio)) {
+    waveformCanvas.width = Math.round(cssWidth * ratio);
+  }
+  if (waveformCanvas.height !== Math.round(cssHeight * ratio)) {
+    waveformCanvas.height = Math.round(cssHeight * ratio);
+  }
+  ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+  ctx.clearRect(0, 0, cssWidth, cssHeight);
+
+  const inset = 16;
+  const width = cssWidth;
+  const height = cssHeight;
+  const duration = maxTimelineDuration();
+  const waveTop = 40;
+  const waveHeight = 82;
+  const waveMid = waveTop + waveHeight / 2;
+  const generatedY = height - 48;
+  const referenceY = height - 28;
+  const laneH = 10;
+
+  ctx.fillStyle = "#0d1012";
+  ctx.fillRect(0, 0, width, height);
+
+  ctx.strokeStyle = "#283038";
+  ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i += 1) {
+    const x = inset + ((width - inset * 2) * i) / 4;
+    ctx.beginPath();
+    ctx.moveTo(x, 12);
+    ctx.lineTo(x, height - 12);
+    ctx.stroke();
+    ctx.fillStyle = "#6f7f88";
+    ctx.font = "11px ui-sans-serif, system-ui";
+    ctx.fillText(formatTime((duration * i) / 4), x + 4, 24);
+  }
+
+  ctx.strokeStyle = "#343c43";
+  ctx.beginPath();
+  ctx.moveTo(inset, waveMid);
+  ctx.lineTo(width - inset, waveMid);
+  ctx.stroke();
+
+  const peaks = state.waveform.peaks || [];
+  if (peaks.length) {
+    const gradient = ctx.createLinearGradient(0, waveTop, 0, waveTop + waveHeight);
+    gradient.addColorStop(0, "#7fb7ff");
+    gradient.addColorStop(0.52, "#4fb286");
+    gradient.addColorStop(1, "#d79a43");
+    ctx.fillStyle = gradient;
+    const drawWidth = width - inset * 2;
+    const bars = Math.min(Math.floor(drawWidth), peaks.length);
+    for (let x = 0; x < bars; x += 1) {
+      const peak = Math.sqrt(Number(peaks[Math.floor((x / bars) * peaks.length)]) || 0);
+      const barH = Math.max(1, peak * waveHeight * 0.92);
+      ctx.fillRect(inset + x, waveMid - barH / 2, 1, barH);
+    }
+  } else {
+    ctx.fillStyle = "#243039";
+    for (let x = inset; x < width - inset; x += 5) {
+      const peak = 0.22 + Math.abs(Math.sin(x * 0.035)) * 0.42;
+      const barH = peak * waveHeight * 0.75;
+      ctx.fillRect(x, waveMid - barH / 2, 2, barH);
+    }
+  }
+
+  state.merged.forEach((row) => {
+    if (row.generated && row.reference) {
+      const generatedMid = (row.generated.start + row.generated.end) / 2;
+      const referenceMid = (row.reference.start + row.reference.end) / 2;
+      const delta = Math.abs(generatedMid - referenceMid);
+      ctx.strokeStyle = delta <= 0.25 ? "#7de0ae" : delta <= 0.75 ? "#d79a43" : "#ef6f6c";
+      ctx.globalAlpha = 0.52;
+      ctx.beginPath();
+      ctx.moveTo(cueX(generatedMid, width, duration, inset), generatedY + laneH);
+      ctx.lineTo(cueX(referenceMid, width, duration, inset), referenceY);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+  });
+
+  state.generated.forEach((cue) => {
+    const x = cueX(cue.start, width, duration, inset);
+    const w = Math.max(2, cueX(cue.end, width, duration, inset) - x);
+    ctx.fillStyle = "rgba(79, 178, 134, 0.86)";
+    drawRoundedRect(ctx, x, generatedY, w, laneH, 4);
+  });
+
+  state.reference.forEach((cue) => {
+    const x = cueX(cue.start, width, duration, inset);
+    const w = Math.max(2, cueX(cue.end, width, duration, inset) - x);
+    ctx.fillStyle = "rgba(215, 154, 67, 0.86)";
+    drawRoundedRect(ctx, x, referenceY, w, laneH, 4);
+  });
+
+  ctx.fillStyle = "#9ca9b1";
+  ctx.font = "11px ui-sans-serif, system-ui";
+  ctx.fillText(t("newSubtitles"), inset, generatedY - 5);
+  ctx.fillText(t("originalSubtitles"), inset, referenceY - 5);
+
+  const current = Math.max(0, Number(videoPlayer.currentTime) || 0);
+  const playheadX = cueX(current, width, duration, inset);
+  ctx.strokeStyle = "#eef3f5";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(playheadX, 10);
+  ctx.lineTo(playheadX, height - 10);
+  ctx.stroke();
+  ctx.fillStyle = "#eef3f5";
+  ctx.beginPath();
+  ctx.arc(playheadX, 10, 4, 0, Math.PI * 2);
+  ctx.fill();
 }
 
 function mergeCues(generated, reference) {
@@ -625,12 +913,13 @@ function formatTime(seconds) {
 function renderCueGrid() {
   cueGrid.innerHTML = "";
   state.merged.forEach((row, index) => {
+    const match = matchInfo(row);
     const item = document.createElement("button");
     item.type = "button";
-    item.className = "cue-row";
+    item.className = `cue-row match-${match.kind}`;
     item.dataset.index = String(index);
     item.innerHTML = `
-      <div class="time">${formatTime(row.start)}</div>
+      <div class="time">${formatTime(row.start)}<span class="row-match ${match.kind}">${escapeHtml(match.label)}</span></div>
       <div>${row.generated ? escapeHtml(row.generated.text) : '<span class="empty-cell">-</span>'}</div>
       <div>${row.reference ? escapeHtml(row.reference.text) : '<span class="empty-cell">-</span>'}</div>
     `;
@@ -738,7 +1027,10 @@ function updateActive() {
     }
   }
 
-  if (wordIndex === state.activeWordIndex) return;
+  if (wordIndex === state.activeWordIndex) {
+    drawWaveformTimeline();
+    return;
+  }
   state.activeWordIndex = wordIndex;
 
   const wordRows = wordGrid.querySelectorAll(".word-row");
@@ -754,11 +1046,15 @@ function updateActive() {
       row.scrollIntoView({ block: "nearest" });
     }
   }
+
+  drawWaveformTimeline();
 }
 
 videoPlayer.addEventListener("timeupdate", updateActive);
+videoPlayer.addEventListener("loadedmetadata", drawWaveformTimeline);
 showGenerated.addEventListener("change", updateActive);
 showReference.addEventListener("change", updateActive);
+window.addEventListener("resize", drawWaveformTimeline);
 
 offsetMs.addEventListener("change", () => {
   state.referenceOffsetSec = (Number(offsetMs.value) || 0) / 1000;
@@ -822,6 +1118,9 @@ function applyTranslations() {
     renderDownloads(state.downloads, state.alignment);
     renderCueGrid();
     renderWordGrid();
+    renderMatchSummary();
+    renderWaveformStatus();
+    drawWaveformTimeline();
     updateActive();
   }
 }

@@ -5,9 +5,11 @@ import os
 import re
 import textwrap
 import subprocess
+import sys
 import threading
 import time
 import uuid
+from array import array
 from base64 import b64decode
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
@@ -746,6 +748,89 @@ def prepare_audio_for_local_stt(job_id: str, source_path: Path) -> Path:
     return target
 
 
+def probe_media_duration(source_path: Path) -> float:
+    cmd = [
+        "ffprobe",
+        "-v",
+        "error",
+        "-show_entries",
+        "format=duration",
+        "-of",
+        "default=noprint_wrappers=1:nokey=1",
+        str(source_path),
+    ]
+    result = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, timeout=30)
+    if result.returncode != 0:
+        raise RuntimeError(result.stderr.strip() or "ffprobe could not read media duration.")
+    duration = float((result.stdout or "0").strip() or 0)
+    if duration <= 0:
+        raise RuntimeError("ffprobe returned an empty media duration.")
+    return duration
+
+
+def build_waveform_data(source_path: Path, bins: int = 1200, sample_rate: int = 8000) -> Dict[str, Any]:
+    duration = probe_media_duration(source_path)
+    total_samples = max(1, int(duration * sample_rate))
+    peaks = [0.0] * bins
+    sample_index = 0
+    leftover = b""
+
+    cmd = [
+        "ffmpeg",
+        "-nostdin",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-i",
+        str(source_path),
+        "-vn",
+        "-ac",
+        "1",
+        "-ar",
+        str(sample_rate),
+        "-f",
+        "s16le",
+        "pipe:1",
+    ]
+    process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    assert process.stdout is not None
+
+    while True:
+        chunk = process.stdout.read(262144)
+        if not chunk:
+            break
+        chunk = leftover + chunk
+        if len(chunk) % 2:
+            leftover = chunk[-1:]
+            chunk = chunk[:-1]
+        else:
+            leftover = b""
+        if not chunk:
+            continue
+        samples = array("h")
+        samples.frombytes(chunk)
+        if sys.byteorder != "little":
+            samples.byteswap()
+        for sample in samples:
+            bin_index = min(bins - 1, (sample_index * bins) // total_samples)
+            amplitude = min(1.0, abs(sample) / 32768.0)
+            if amplitude > peaks[bin_index]:
+                peaks[bin_index] = amplitude
+            sample_index += 1
+
+    stderr = process.stderr.read().decode("utf-8", errors="replace") if process.stderr else ""
+    return_code = process.wait()
+    if return_code != 0:
+        raise RuntimeError(stderr.strip() or f"ffmpeg waveform extraction exited with code {return_code}.")
+
+    return {
+        "duration": round(duration, 3),
+        "sample_rate": sample_rate,
+        "bins": bins,
+        "peaks": [round(value, 4) for value in peaks],
+    }
+
+
 def run_whisperx_transcription(job_id: str) -> None:
     job = jobs[job_id]
     output_dir = Path(job["output_dir"])
@@ -1116,6 +1201,7 @@ def job_result(job_id: str) -> Dict[str, Any]:
         "stt_provider": job.get("stt_provider", "whisperx"),
         "video_name": job["video_name"],
         "video_url": f"/api/jobs/{job_id}/video",
+        "waveform_url": f"/api/jobs/{job_id}/waveform",
         "generated_cues": generated_cues,
         "word_timestamps": word_timestamps,
         "reference_cues": reference_cues,
@@ -1129,6 +1215,35 @@ def job_result(job_id: str) -> Dict[str, Any]:
         },
         "log_tail": log_tail(job_id),
     }
+
+
+@app.get("/api/jobs/{job_id}/waveform")
+def job_waveform(job_id: str) -> Dict[str, Any]:
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found.")
+
+    source_path = Path(job["video_path"])
+    if not source_path.exists():
+        raise HTTPException(status_code=404, detail="Video not found.")
+
+    output_dir = Path(job["output_dir"])
+    output_dir.mkdir(parents=True, exist_ok=True)
+    cache_path = output_dir / "waveform.json"
+    if cache_path.exists():
+        try:
+            return json.loads(cache_path.read_text(encoding="utf-8"))
+        except Exception:
+            cache_path.unlink(missing_ok=True)
+
+    try:
+        data = build_waveform_data(source_path)
+    except Exception as exc:
+        append_log(job_id, f"WARNING: waveform extraction failed: {exc}")
+        raise HTTPException(status_code=500, detail=str(exc))
+
+    cache_path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    return data
 
 
 @app.get("/api/jobs/{job_id}/video")

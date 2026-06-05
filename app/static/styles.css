@@ -371,6 +371,78 @@ video {
   width: 100%;
 }
 
+.timeline-panel {
+  background: #0d1012;
+  border-top: 1px solid var(--line);
+  padding: 14px;
+}
+
+.timeline-header {
+  align-items: start;
+  display: flex;
+  gap: 12px;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.timeline-header h2 {
+  font-size: 15px;
+  line-height: 1.2;
+  margin: 0 0 5px;
+}
+
+.timeline-header span,
+.waveform-status {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.timeline-legend {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  justify-content: flex-end;
+}
+
+.timeline-legend > span {
+  align-items: center;
+  display: inline-flex;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.timeline-legend i {
+  border-radius: 50%;
+  display: inline-block;
+  height: 9px;
+  width: 9px;
+}
+
+.legend-new {
+  background: var(--accent);
+}
+
+.legend-original {
+  background: var(--accent-2);
+}
+
+.legend-match {
+  background: var(--focus);
+}
+
+#waveformCanvas {
+  background: #0d1012;
+  border: 1px solid #283038;
+  display: block;
+  height: 190px;
+  width: 100%;
+}
+
+.waveform-status {
+  margin-top: 8px;
+}
+
 .subtitle-overlay {
   background: #0d1012;
   border-top: 1px solid var(--line);
@@ -547,6 +619,53 @@ video {
   width: 100%;
 }
 
+.cue-row.match-good {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+
+.cue-row.match-drift {
+  box-shadow: inset 3px 0 0 var(--accent-2);
+}
+
+.cue-row.match-off {
+  box-shadow: inset 3px 0 0 var(--danger);
+}
+
+.cue-row.match-new-only,
+.cue-row.match-original-only {
+  box-shadow: inset 3px 0 0 #64727a;
+}
+
+.row-match {
+  border: 1px solid var(--line);
+  color: var(--muted);
+  display: inline-block;
+  font-size: 10px;
+  line-height: 1;
+  margin-top: 6px;
+  max-width: 74px;
+  overflow: hidden;
+  padding: 4px 5px;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.row-match.good {
+  border-color: color-mix(in srgb, var(--accent), var(--line) 35%);
+  color: #bdf4d9;
+}
+
+.row-match.drift {
+  border-color: color-mix(in srgb, var(--accent-2), var(--line) 35%);
+  color: #ffdba4;
+}
+
+.row-match.off {
+  border-color: color-mix(in srgb, var(--danger), var(--line) 30%);
+  color: #ffc4c2;
+}
+
 .cue-row:hover,
 .cue-row.active,
 .word-row:hover,
@@ -596,6 +715,14 @@ video {
   .compare-header {
     align-items: flex-start;
     display: grid;
+  }
+
+  .timeline-header {
+    display: grid;
+  }
+
+  .timeline-legend {
+    justify-content: flex-start;
   }
 
   .cue-grid-head,

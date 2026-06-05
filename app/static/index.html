@@ -152,6 +152,21 @@
       <section class="review-layout" id="reviewLayout" hidden>
         <div class="player-panel">
           <video id="videoPlayer" controls preload="metadata"></video>
+          <div class="timeline-panel">
+            <div class="timeline-header">
+              <div>
+                <h2 data-i18n="matchTimeline">Match visual</h2>
+                <span id="matchSummary" data-i18n="matchWaiting">Esperando resultados</span>
+              </div>
+              <div class="timeline-legend">
+                <span><i class="legend-new"></i><span data-i18n="newSubtitles">Nuevo</span></span>
+                <span><i class="legend-original"></i><span data-i18n="originalSubtitles">Original</span></span>
+                <span><i class="legend-match"></i><span data-i18n="matchedSubtitles">Match</span></span>
+              </div>
+            </div>
+            <canvas id="waveformCanvas" height="190"></canvas>
+            <div class="waveform-status" id="waveformStatus" data-i18n="waveformWaiting">La onda aparecera cuando termine la transcripcion.</div>
+          </div>
           <div class="subtitle-overlay" id="subtitleOverlay">
             <div class="cue-new" id="activeGenerated"></div>
             <div class="cue-old" id="activeReference"></div>
