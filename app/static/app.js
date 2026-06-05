@@ -131,6 +131,10 @@ const I18N = {
     waveformLoading: "Generando onda de sonido desde el audio...",
     waveformReady: "Onda lista. Los bloques de abajo muestran como encajan los subtitulos.",
     waveformUnavailable: "No se pudo generar la onda, pero puedes revisar los carriles de subtitulos.",
+    wordResync: "Resync por palabras",
+    cues: "cues",
+    tokenCoverage: "cobertura tokens",
+    interpolated: "interpolados",
     "status.done": "Completado",
     "status.error": "Error",
     "status.running": "Trabajando",
@@ -242,6 +246,10 @@ const I18N = {
     waveformLoading: "Generating sound waveform from the audio...",
     waveformReady: "Waveform ready. The lanes below show how subtitles line up.",
     waveformUnavailable: "Could not generate the waveform, but the subtitle lanes are still available.",
+    wordResync: "Word resync",
+    cues: "cues",
+    tokenCoverage: "token coverage",
+    interpolated: "interpolated",
     "status.done": "Done",
     "status.error": "Error",
     "status.running": "Working",
@@ -634,7 +642,14 @@ function renderDownloads(downloads, alignment) {
   const scale = Number(alignment.scale || 1);
   const matches = Number(alignment.matches || 0);
   const quality = alignment.quality || "none";
-  meta.textContent = `${t("autoOffset")}: ${offset}ms | scale: ${scale.toFixed(6)} | ${t("matches")}: ${matches} | ${quality}`;
+  if (alignment.source === "word_resync") {
+    const coverage = Number(alignment.token_coverage || 0).toFixed(1);
+    const interpolated = Number(alignment.interpolated_cues || 0);
+    const medianShift = Math.round(Number(alignment.median_shift_sec || 0) * 1000);
+    meta.textContent = `${t("wordResync")}: ${matches} ${t("cues")} | ${t("tokenCoverage")}: ${coverage}% | ${t("interpolated")}: ${interpolated} | shift: ${medianShift}ms | ${quality}`;
+  } else {
+    meta.textContent = `${t("autoOffset")}: ${offset}ms | scale: ${scale.toFixed(6)} | ${t("matches")}: ${matches} | ${quality}`;
+  }
   downloadRow.appendChild(meta);
 
   Object.entries(downloads).forEach(([kind, url]) => {

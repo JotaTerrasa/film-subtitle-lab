@@ -18,6 +18,8 @@ The app is designed for a Windows workstation with an NVIDIA RTX GPU, Docker Des
 - Embedded media player with synchronized subtitle overlay.
 - Human-readable live progress stages during upload, transcription, alignment, and export.
 - Automatic reference subtitle alignment using offset and timing scale estimation.
+- Word-level reference subtitle re-sync: when an original subtitle file is uploaded, the app can preserve its text and replace its timings from the STT word timeline.
+- Extra `SYNC_SRT`, `SYNC_VTT`, and `SYNC_TSV` downloads for the re-synced original subtitle file.
 - Manual reference offset controls for fine tuning without retranscribing.
 - Persistent job/model folders mounted from the host.
 - Optional Cloudflare tunnel for remote access.
@@ -153,7 +155,8 @@ By default, the tunnel script does not enable Basic Auth. Treat the printed URL 
 7. Wait for upload and transcription to finish.
 8. Review generated and reference subtitles in the synchronized comparison view.
 9. Inspect word-level timestamps and click a word row to jump the player to that point.
-10. Download the generated subtitle files.
+10. If you uploaded an existing subtitle file, download the `SYNC_*` files to keep the original text with corrected timings.
+11. Download the generated subtitle files.
 
 ## STT Providers
 

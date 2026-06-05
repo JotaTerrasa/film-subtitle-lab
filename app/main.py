@@ -72,6 +72,10 @@ WHISPERX_ENGLISH_QUALITY_ARGS = [
     "linear",
 ]
 
+RESYNC_MIN_CUE_DURATION = 0.5
+RESYNC_MIN_GAP = 0.001
+RESYNC_TOKEN_RE = re.compile(r"[\w']+", re.UNICODE)
+
 PROVIDER_STEPS = {
     "whisperx": ["queued", "prepare", "audio", "vad", "transcribe", "align", "export", "done"],
     "elevenlabs": ["queued", "prepare", "upload", "remote", "export", "done"],
@@ -566,6 +570,301 @@ def write_tsv(path: Path, cues: List[Dict[str, Any]]) -> None:
     rows = ["start\tend\ttext"]
     rows.extend(f"{cue['start']}\t{cue['end']}\t{cue['text'].replace(chr(9), ' ')}" for cue in cues)
     path.write_text("\n".join(rows) + "\n", encoding="utf-8")
+
+
+def tokenize_resync_text(value: str) -> List[str]:
+    tokens: List[str] = []
+    for raw in RESYNC_TOKEN_RE.findall(value.lower()):
+        token = raw.strip("'_")
+        if token:
+            tokens.append(token)
+    return tokens
+
+
+def word_tokens_for_resync(word_timestamps: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    words: List[Dict[str, Any]] = []
+    for word in word_timestamps:
+        start = word.get("start")
+        end = word.get("end")
+        if start is None or end is None:
+            continue
+        tokens = tokenize_resync_text(str(word.get("text") or ""))
+        if not tokens:
+            continue
+        for token in tokens:
+            words.append(
+                {
+                    "token": token,
+                    "start": float(start),
+                    "end": float(end),
+                    "text": str(word.get("text") or ""),
+                }
+            )
+    return words
+
+
+def estimate_resync_cue_times(
+    reference_cues: List[Dict[str, Any]],
+    word_timestamps: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    cue_tokens = [tokenize_resync_text(cue.get("text", "")) for cue in reference_cues]
+    sub_tokens: List[str] = []
+    spans: List[Optional[tuple[int, int]]] = []
+    for tokens in cue_tokens:
+        if tokens:
+            spans.append((len(sub_tokens), len(sub_tokens) + len(tokens) - 1))
+        else:
+            spans.append(None)
+        sub_tokens.extend(tokens)
+
+    words = word_tokens_for_resync(word_timestamps)
+    trans_tokens = [word["token"] for word in words]
+    if not sub_tokens or not trans_tokens:
+        return {
+            "cue_times": {},
+            "tokens": len(sub_tokens),
+            "matched_tokens": 0,
+            "token_coverage": 0.0,
+            "word_tokens": len(trans_tokens),
+        }
+
+    matcher = SequenceMatcher(a=sub_tokens, b=trans_tokens, autojunk=False)
+    matched: Dict[int, Dict[str, Any]] = {}
+    for a0, b0, size in matcher.get_matching_blocks():
+        for idx in range(size):
+            matched[a0 + idx] = words[b0 + idx]
+
+    token_count = len(sub_tokens)
+    word_durations = [word["end"] - word["start"] for word in words if word["end"] > word["start"]]
+    average_word_duration = median(word_durations) if word_durations else 0.3
+
+    lower = [-1] * token_count
+    current = -1
+    for idx in range(token_count):
+        if idx in matched:
+            current = idx
+        lower[idx] = current
+
+    upper = [-1] * token_count
+    current = -1
+    for idx in range(token_count - 1, -1, -1):
+        if idx in matched:
+            current = idx
+        upper[idx] = current
+
+    token_starts = [0.0] * token_count
+    token_ends = [0.0] * token_count
+    for idx in range(token_count):
+        if idx in matched:
+            token_starts[idx] = matched[idx]["start"]
+            token_ends[idx] = matched[idx]["end"]
+            continue
+
+        lo = lower[idx]
+        hi = upper[idx]
+        if lo == -1 and hi == -1:
+            value = 0.0
+        elif lo == -1:
+            value = max(0.0, matched[hi]["start"] - (hi - idx) * average_word_duration)
+        elif hi == -1:
+            value = matched[lo]["end"] + (idx - lo) * average_word_duration
+        else:
+            left = matched[lo]["end"]
+            right = matched[hi]["start"]
+            value = left + (right - left) * (idx - lo) / (hi - lo)
+        token_starts[idx] = value
+        token_ends[idx] = value
+
+    cue_times: Dict[int, Dict[str, Any]] = {}
+    for cue, span in zip(reference_cues, spans):
+        if span is None:
+            continue
+        start_idx, end_idx = span
+        any_matched = any(idx in matched for idx in range(start_idx, end_idx + 1))
+        start = token_starts[start_idx]
+        end = max(token_ends[end_idx], start)
+        cue_times[int(cue["index"])] = {
+            "start": start,
+            "end": end,
+            "matched": any_matched,
+        }
+
+    return {
+        "cue_times": cue_times,
+        "tokens": token_count,
+        "matched_tokens": len(matched),
+        "token_coverage": round((len(matched) / token_count) * 100, 1) if token_count else 0.0,
+        "word_tokens": len(trans_tokens),
+    }
+
+
+def interpolate_resync_gaps(cues: List[Dict[str, Any]]) -> int:
+    anchored = [idx for idx, cue in enumerate(cues) if cue.get("matched")]
+    if not anchored:
+        return 0
+
+    interpolated = 0
+    first = anchored[0]
+    if first > 0:
+        boundary = float(cues[first]["start"])
+        for idx in range(first - 1, -1, -1):
+            original_duration = max(
+                float(cues[idx].get("original_end", cues[idx]["end"])) - float(cues[idx].get("original_start", cues[idx]["start"])),
+                RESYNC_MIN_CUE_DURATION,
+            )
+            cues[idx]["end"] = round(max(0.0, boundary - RESYNC_MIN_GAP), 3)
+            cues[idx]["start"] = round(max(0.0, cues[idx]["end"] - original_duration), 3)
+            cues[idx]["matched"] = False
+            boundary = float(cues[idx]["start"])
+            interpolated += 1
+
+    last = anchored[-1]
+    if last < len(cues) - 1:
+        boundary = float(cues[last]["end"])
+        for idx in range(last + 1, len(cues)):
+            original_duration = max(
+                float(cues[idx].get("original_end", cues[idx]["end"])) - float(cues[idx].get("original_start", cues[idx]["start"])),
+                RESYNC_MIN_CUE_DURATION,
+            )
+            cues[idx]["start"] = round(boundary + RESYNC_MIN_GAP, 3)
+            cues[idx]["end"] = round(cues[idx]["start"] + original_duration, 3)
+            cues[idx]["matched"] = False
+            boundary = float(cues[idx]["end"])
+            interpolated += 1
+
+    for left, right in zip(anchored, anchored[1:]):
+        if right - left == 1:
+            continue
+        gap_start = float(cues[left]["end"])
+        gap_end = float(cues[right]["start"])
+        span = max(0.0, gap_end - gap_start)
+        inner = list(range(left + 1, right))
+        weights = [max(len(tokenize_resync_text(cues[idx].get("text", ""))), 1) for idx in inner]
+        total = sum(weights)
+        cursor = gap_start
+        for idx, weight in zip(inner, weights):
+            slice_duration = span * (weight / total) if total else 0.0
+            cues[idx]["start"] = round(cursor + RESYNC_MIN_GAP, 3)
+            cues[idx]["end"] = round(max(cues[idx]["start"] + RESYNC_MIN_GAP, cursor + slice_duration), 3)
+            cues[idx]["matched"] = False
+            cursor = float(cues[idx]["end"])
+            interpolated += 1
+
+    return interpolated
+
+
+def enforce_resync_monotonic(cues: List[Dict[str, Any]]) -> None:
+    previous_end = 0.0
+    for cue in cues:
+        start = float(cue.get("start") or 0.0)
+        end = float(cue.get("end") or 0.0)
+        if start < previous_end + RESYNC_MIN_GAP:
+            start = previous_end + RESYNC_MIN_GAP
+        if end < start + RESYNC_MIN_CUE_DURATION:
+            end = start + RESYNC_MIN_CUE_DURATION
+        cue["start"] = round(start, 3)
+        cue["end"] = round(end, 3)
+        previous_end = end
+
+
+def resync_reference_cues(
+    reference_cues: List[Dict[str, Any]],
+    word_timestamps: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    if not reference_cues or not word_timestamps:
+        return {"available": False, "cues": [], "reason": "missing_reference_or_words"}
+
+    estimate = estimate_resync_cue_times(reference_cues, word_timestamps)
+    cue_times: Dict[int, Dict[str, Any]] = estimate["cue_times"]
+    if not cue_times:
+        return {
+            "available": False,
+            "cues": [],
+            "reason": "no_token_alignment",
+            "tokens": estimate.get("tokens", 0),
+            "matched_tokens": estimate.get("matched_tokens", 0),
+            "token_coverage": estimate.get("token_coverage", 0.0),
+        }
+    if not any(cue_time.get("matched") for cue_time in cue_times.values()):
+        return {
+            "available": False,
+            "cues": [],
+            "reason": "no_direct_cue_matches",
+            "tokens": estimate.get("tokens", 0),
+            "matched_tokens": estimate.get("matched_tokens", 0),
+            "token_coverage": estimate.get("token_coverage", 0.0),
+        }
+
+    resynced: List[Dict[str, Any]] = []
+    direct_matches = 0
+    shifts: List[float] = []
+    for cue in reference_cues:
+        original_start = float(cue["start"])
+        original_end = float(cue["end"])
+        cue_time = cue_times.get(int(cue["index"]))
+        matched = bool(cue_time and cue_time.get("matched"))
+        if cue_time:
+            start = float(cue_time["start"])
+            end = max(float(cue_time["end"]), start)
+        else:
+            start = original_start
+            end = original_end
+        if matched:
+            direct_matches += 1
+            shifts.append(start - original_start)
+        resynced.append(
+            {
+                "index": len(resynced) + 1,
+                "start": round(max(0.0, start), 3),
+                "end": round(max(0.0, end), 3),
+                "text": cue["text"],
+                "original_start": round(original_start, 3),
+                "original_end": round(original_end, 3),
+                "matched": matched,
+            }
+        )
+
+    interpolated = interpolate_resync_gaps(resynced)
+    enforce_resync_monotonic(resynced)
+
+    token_coverage = float(estimate.get("token_coverage", 0.0))
+    quality = "high" if token_coverage >= 60 and direct_matches >= 8 else "medium" if token_coverage >= 35 else "low"
+    return {
+        "available": True,
+        "strategy": "word_token_timeline",
+        "quality": quality,
+        "cues": resynced,
+        "cues_total": len(resynced),
+        "matched_cues": direct_matches,
+        "interpolated_cues": interpolated,
+        "tokens": estimate.get("tokens", 0),
+        "matched_tokens": estimate.get("matched_tokens", 0),
+        "token_coverage": token_coverage,
+        "word_tokens": estimate.get("word_tokens", 0),
+        "median_shift_sec": round(median(shifts), 3) if shifts else 0.0,
+    }
+
+
+def reference_resync_path(job: Dict[str, Any], suffix: str) -> Path:
+    output_dir = Path(job["output_dir"])
+    stem = Path(job["video_path"]).stem
+    return output_dir / f"{stem}.reference-resynced.{suffix}"
+
+
+def write_reference_resync_outputs(job: Dict[str, Any], cues: List[Dict[str, Any]]) -> Dict[str, str]:
+    if not cues:
+        return {}
+    output_dir = Path(job["output_dir"])
+    output_dir.mkdir(parents=True, exist_ok=True)
+    paths = {
+        "sync_srt": reference_resync_path(job, "srt"),
+        "sync_vtt": reference_resync_path(job, "vtt"),
+        "sync_tsv": reference_resync_path(job, "tsv"),
+    }
+    write_srt(paths["sync_srt"], cues)
+    write_vtt(paths["sync_vtt"], cues)
+    write_tsv(paths["sync_tsv"], cues)
+    return {key: str(path) for key, path in paths.items()}
 
 
 def extract_word_timestamps(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -1194,7 +1493,23 @@ def job_result(job_id: str) -> Dict[str, Any]:
     generated_cues = parse_subtitle_file(generated_srt or generated_vtt)
     reference_cues = parse_subtitle_file(reference_path)
     word_timestamps = extract_word_timestamps(load_json_payload(generated_json))
-    alignment = estimate_reference_alignment(generated_cues, reference_cues)
+    global_alignment = estimate_reference_alignment(generated_cues, reference_cues)
+    reference_resync = resync_reference_cues(reference_cues, word_timestamps)
+    comparison_reference_cues = reference_resync["cues"] if reference_resync.get("available") else reference_cues
+    if reference_resync.get("available"):
+        write_reference_resync_outputs(job, comparison_reference_cues)
+        alignment = {
+            "offset_sec": 0.0,
+            "scale": 1.0,
+            "matches": int(reference_resync.get("matched_cues", 0)),
+            "quality": reference_resync.get("quality", "medium"),
+            "source": "word_resync",
+            "token_coverage": reference_resync.get("token_coverage", 0.0),
+            "interpolated_cues": reference_resync.get("interpolated_cues", 0),
+            "median_shift_sec": reference_resync.get("median_shift_sec", 0.0),
+        }
+    else:
+        alignment = {**global_alignment, "source": "global_offset_scale"}
 
     return {
         "id": job_id,
@@ -1204,14 +1519,26 @@ def job_result(job_id: str) -> Dict[str, Any]:
         "waveform_url": f"/api/jobs/{job_id}/waveform",
         "generated_cues": generated_cues,
         "word_timestamps": word_timestamps,
-        "reference_cues": reference_cues,
+        "reference_cues": comparison_reference_cues,
+        "uploaded_reference_cues": reference_cues,
+        "reference_resync": {key: value for key, value in reference_resync.items() if key != "cues"},
         "alignment": alignment,
+        "global_alignment": global_alignment,
         "downloads": {
             "srt": f"/api/jobs/{job_id}/download/srt" if generated_srt else "",
             "vtt": f"/api/jobs/{job_id}/download/vtt" if generated_vtt else "",
             "json": f"/api/jobs/{job_id}/download/json" if generated_json else "",
             "txt": f"/api/jobs/{job_id}/download/txt" if generated_txt else "",
             "tsv": f"/api/jobs/{job_id}/download/tsv" if generated_tsv else "",
+            "sync_srt": f"/api/jobs/{job_id}/download-reference/srt"
+            if reference_resync.get("available")
+            else "",
+            "sync_vtt": f"/api/jobs/{job_id}/download-reference/vtt"
+            if reference_resync.get("available")
+            else "",
+            "sync_tsv": f"/api/jobs/{job_id}/download-reference/tsv"
+            if reference_resync.get("available")
+            else "",
         },
         "log_tail": log_tail(job_id),
     }
@@ -1267,4 +1594,17 @@ def download_output(job_id: str, kind: str) -> FileResponse:
     path = find_output(job, kind)
     if not path or not path.exists():
         raise HTTPException(status_code=404, detail="Output not found.")
+    return FileResponse(path, filename=path.name)
+
+
+@app.get("/api/jobs/{job_id}/download-reference/{kind}")
+def download_reference_resync(job_id: str, kind: str) -> FileResponse:
+    if kind not in {"srt", "vtt", "tsv"}:
+        raise HTTPException(status_code=404, detail="Unknown file type.")
+    job = jobs.get(job_id)
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found.")
+    path = reference_resync_path(job, kind)
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Resynced reference output not found.")
     return FileResponse(path, filename=path.name)
