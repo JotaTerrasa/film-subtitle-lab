@@ -53,6 +53,19 @@ select {
   margin: 6px 0 0;
 }
 
+.ui-language {
+  color: var(--muted);
+  display: grid;
+  font-size: 12px;
+  gap: 6px;
+  min-width: 132px;
+}
+
+.ui-language select {
+  height: 36px;
+  min-width: 132px;
+}
+
 .ghost-link {
   border: 1px solid var(--line);
   color: var(--muted);
@@ -565,6 +578,10 @@ video {
   .topbar,
   .review-layout {
     display: block;
+  }
+
+  .ui-language {
+    margin-top: 14px;
   }
 
   .drop-actions {

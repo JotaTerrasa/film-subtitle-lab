@@ -2,15 +2,19 @@ const state = {
   videoFile: null,
   referenceFile: null,
   jobId: null,
+  currentStage: null,
   generated: [],
   words: [],
   referenceRaw: [],
   reference: [],
   merged: [],
+  downloads: {},
+  alignment: {},
   activeWordIndex: -1,
   autoOffsetSec: 0,
   referenceOffsetSec: 0,
   referenceScale: 1,
+  uiLanguage: window.localStorage.getItem("filmSubtitleLab.uiLanguage") || "es",
 };
 
 const dropZone = document.getElementById("dropZone");
@@ -47,6 +51,253 @@ const offsetMs = document.getElementById("offsetMs");
 const offsetMinus = document.getElementById("offsetMinus");
 const offsetPlus = document.getElementById("offsetPlus");
 const offsetReset = document.getElementById("offsetReset");
+const uiLanguage = document.getElementById("uiLanguage");
+
+const I18N = {
+  es: {
+    appSubtitle: "Transcripcion local con RTX 4090",
+    uiLanguage: "Interfaz",
+    dropKicker: "Arrastra",
+    dropTitle: "Video/audio + SRT/VTT opcional",
+    chooseFiles: "Elegir archivos",
+    clear: "Limpiar",
+    audioLanguage: "Idioma audio",
+    langEnglish: "Ingles",
+    langSpanish: "Espanol",
+    langAuto: "Auto",
+    langFrench: "Frances",
+    langGerman: "Aleman",
+    langItalian: "Italiano",
+    localModel: "Modelo",
+    elevenModel: "Modelo ElevenLabs",
+    batch: "Lote",
+    compute: "Calculo",
+    timestamps: "Timestamps",
+    speakers: "Hablantes",
+    temperature: "Temperatura",
+    seed: "Semilla",
+    diarize: "Diarizar",
+    audioEvents: "Eventos de audio",
+    cleanFiller: "Limpiar muletillas",
+    keyterms: "Terminos clave",
+    keytermsPlaceholder: "nombres, lugares, terminos tecnicos",
+    auto: "Auto",
+    transcribe: "Transcribir",
+    technicalLog: "Log tecnico",
+    comparisonTitle: "Comparacion sincronizada",
+    newSubtitles: "Nuevo",
+    originalSubtitles: "Original",
+    originalOffset: "Offset original",
+    offsetMinusTitle: "Adelantar original 100 ms",
+    offsetPlusTitle: "Retrasar original 100 ms",
+    offsetResetTitle: "Volver al offset automatico",
+    time: "Tiempo",
+    wordTimestamps: "Timestamps palabra",
+    word: "Palabra",
+    confidence: "Confianza",
+    noFiles: "Sin archivos seleccionados",
+    media: "Media",
+    original: "Original",
+    uploading: "Subiendo",
+    uploadingPercent: "Subiendo {percent}%",
+    uploadError: "Error al subir",
+    queuedStatus: "En cola",
+    networkUploadError: "Error de red durante la subida.",
+    noWordTimestamps: "Sin timestamps por palabra",
+    working: "Trabajando",
+    stageFallback: "La transcripcion esta en curso.",
+    autoOffset: "Offset auto",
+    matches: "coincidencias",
+    "status.done": "Completado",
+    "status.error": "Error",
+    "status.running": "Trabajando",
+    "status.queued": "En cola",
+    "step.upload": "Subida",
+    "step.queue": "Cola",
+    "step.prepare": "Preparacion",
+    "step.audio": "Audio",
+    "step.vad": "Voz",
+    "step.transcribe": "Transcripcion",
+    "step.align": "Alineado",
+    "step.remote": "API alojada",
+    "step.export": "Exportacion",
+    "step.review": "Revision",
+    "stage.browserUpload.title": "Subiendo archivo",
+    "stage.browserUpload.detail":
+      "El navegador esta enviando el audio/video y los subtitulos opcionales a la estacion de trabajo.",
+    uploadProgress: "Progreso de subida: {percent}%. Los videos grandes pueden tardar un poco.",
+    "stage.uploadFailed.title": "Fallo en la subida",
+    "stage.uploadFailed.detail":
+      "El navegador no pudo enviar el archivo a la estacion de trabajo. Revisa la conexion e intentalo de nuevo.",
+    "stage.queued.title": "Esperando turno",
+    "stage.queued.detail": "El archivo ya esta subido y el trabajo esta entrando en la cola de procesamiento.",
+    "stage.prepare.title": "Preparando transcripcion",
+    "stage.prepare.detail": "El backend esta preparando modelo, GPU/cache, idioma y carpetas de salida.",
+    "stage.audio.title": "Preparando audio",
+    "stage.audio.detail": "La app esta extrayendo una pista mono normalizada y optimizada para reconocer voz.",
+    "stage.vad.title": "Detectando voz",
+    "stage.vad.detail": "WhisperX esta separando dialogo de silencios, musica o ruido.",
+    "stage.transcribe.title": "Transcribiendo dialogo",
+    "stage.transcribe.detail": "El motor STT esta convirtiendo el habla en texto.",
+    "stage.align.title": "Alineando palabras",
+    "stage.align.detail": "La app esta refinando los timestamps por palabra para que los subtitulos entren a tiempo.",
+    "stage.upload.title": "Enviando a ElevenLabs",
+    "stage.upload.detail": "El backend esta subiendo el archivo y los parametros elegidos a la API alojada.",
+    "stage.remote.title": "Esperando a ElevenLabs",
+    "stage.remote.detail": "ElevenLabs esta procesando el audio y devolviendo texto con timestamps.",
+    "stage.export.title": "Generando subtitulos",
+    "stage.export.detail": "La app esta creando SRT, VTT, JSON, TXT, TSV y la vista de comparacion.",
+    "stage.done.title": "Listo para revisar",
+    "stage.done.detail": "La transcripcion ha terminado y los subtitulos estan listos para revisar o descargar.",
+    "stage.error.title": "Transcripcion detenida",
+    "stage.error.detail": "El trabajo encontro un error. Revisa el mensaje y el log tecnico debajo.",
+  },
+  en: {
+    appSubtitle: "Local transcription with RTX 4090",
+    uiLanguage: "Interface",
+    dropKicker: "Drop",
+    dropTitle: "Video/audio + optional SRT/VTT",
+    chooseFiles: "Choose files",
+    clear: "Clear",
+    audioLanguage: "Audio language",
+    langEnglish: "English",
+    langSpanish: "Spanish",
+    langAuto: "Auto",
+    langFrench: "French",
+    langGerman: "German",
+    langItalian: "Italian",
+    localModel: "Model",
+    elevenModel: "ElevenLabs model",
+    batch: "Batch",
+    compute: "Compute",
+    timestamps: "Timestamps",
+    speakers: "Speakers",
+    temperature: "Temperature",
+    seed: "Seed",
+    diarize: "Diarize",
+    audioEvents: "Audio events",
+    cleanFiller: "Clean filler",
+    keyterms: "Keyterms",
+    keytermsPlaceholder: "names, places, technical terms",
+    auto: "Auto",
+    transcribe: "Transcribe",
+    technicalLog: "Technical log",
+    comparisonTitle: "Synchronized comparison",
+    newSubtitles: "New",
+    originalSubtitles: "Original",
+    originalOffset: "Original offset",
+    offsetMinusTitle: "Move original subtitles 100 ms earlier",
+    offsetPlusTitle: "Move original subtitles 100 ms later",
+    offsetResetTitle: "Return to the automatic offset",
+    time: "Time",
+    wordTimestamps: "Word timestamps",
+    word: "Word",
+    confidence: "Confidence",
+    noFiles: "No files selected",
+    media: "Media",
+    original: "Original",
+    uploading: "Uploading",
+    uploadingPercent: "Uploading {percent}%",
+    uploadError: "Upload error",
+    queuedStatus: "Queued",
+    networkUploadError: "Network error during upload.",
+    noWordTimestamps: "No word timestamps",
+    working: "Working",
+    stageFallback: "Transcription is in progress.",
+    autoOffset: "Auto offset",
+    matches: "matches",
+    "status.done": "Done",
+    "status.error": "Error",
+    "status.running": "Working",
+    "status.queued": "Queued",
+    "step.upload": "Upload",
+    "step.queue": "Queue",
+    "step.prepare": "Setup",
+    "step.audio": "Audio",
+    "step.vad": "Speech",
+    "step.transcribe": "Transcription",
+    "step.align": "Alignment",
+    "step.remote": "Hosted API",
+    "step.export": "Export",
+    "step.review": "Review",
+    "stage.browserUpload.title": "Uploading media",
+    "stage.browserUpload.detail":
+      "The browser is sending the selected audio/video and optional subtitles to the workstation.",
+    uploadProgress: "Upload progress: {percent}%. Large video files can take a little while.",
+    "stage.uploadFailed.title": "Upload failed",
+    "stage.uploadFailed.detail":
+      "The browser could not send the selected file to the workstation. Check the connection and try again.",
+    "stage.queued.title": "Waiting for an available worker",
+    "stage.queued.detail": "The file is uploaded and the transcription job is entering the processing queue.",
+    "stage.prepare.title": "Preparing transcription",
+    "stage.prepare.detail": "The backend is setting up the model, GPU/cache, language, and output folders.",
+    "stage.audio.title": "Preparing audio",
+    "stage.audio.detail": "The app is extracting a mono, normalized track optimized for speech recognition.",
+    "stage.vad.title": "Detecting speech",
+    "stage.vad.detail": "WhisperX is separating dialogue from silence, music, or noise.",
+    "stage.transcribe.title": "Transcribing dialogue",
+    "stage.transcribe.detail": "The STT engine is converting spoken dialogue into text.",
+    "stage.align.title": "Aligning words",
+    "stage.align.detail": "The app is refining word-level timestamps so subtitles land correctly.",
+    "stage.upload.title": "Sending to ElevenLabs",
+    "stage.upload.detail": "The backend is uploading the file and selected options to the hosted API.",
+    "stage.remote.title": "Waiting for ElevenLabs",
+    "stage.remote.detail": "ElevenLabs is processing audio and returning text with timestamps.",
+    "stage.export.title": "Generating subtitles",
+    "stage.export.detail": "The app is converting the transcript to SRT, VTT, JSON, TXT, TSV, and the comparison view.",
+    "stage.done.title": "Ready for review",
+    "stage.done.detail": "Transcription finished and subtitles are ready to inspect or download.",
+    "stage.error.title": "Transcription stopped",
+    "stage.error.detail": "The job hit an error. Check the message and technical log below.",
+  },
+};
+
+function getUiLanguage() {
+  return uiLanguage?.value || state.uiLanguage || "es";
+}
+
+function hasTranslation(key) {
+  const lang = getUiLanguage();
+  return Boolean(I18N[lang]?.[key] || I18N.es[key] || I18N.en[key]);
+}
+
+function t(key, params = {}) {
+  params = params || {};
+  const lang = getUiLanguage();
+  const table = I18N[lang] || I18N.es;
+  let value = table[key] ?? I18N.es[key] ?? I18N.en[key] ?? key;
+  Object.entries(params).forEach(([name, replacement]) => {
+    value = value.replaceAll(`{${name}}`, String(replacement));
+  });
+  return value;
+}
+
+function statusLabel(status) {
+  const key = `status.${status}`;
+  return hasTranslation(key) ? t(key) : status;
+}
+
+function browserStageSteps(upload, queue, transcribe, review) {
+  return [
+    { key: "upload", state: upload },
+    { key: "queue", state: queue },
+    { key: "transcribe", state: transcribe },
+    { key: "review", state: review },
+  ];
+}
+
+function localizeStage(stage) {
+  if (!stage) return null;
+  const key = stage.key || "";
+  const titleKey = stage.title_i18n || (key ? `stage.${key}.title` : "");
+  const detailKey = stage.detail_i18n || (key ? `stage.${key}.detail` : "");
+  const title = titleKey && hasTranslation(titleKey) ? t(titleKey, stage.title_args) : stage.title || t("working");
+  const detail =
+    detailKey && hasTranslation(detailKey)
+      ? t(detailKey, stage.detail_args)
+      : stage.detail || t("stageFallback");
+  return { ...stage, title, detail };
+}
 
 function appendIfValue(form, name, value) {
   const trimmed = String(value || "").trim();
@@ -54,14 +305,16 @@ function appendIfValue(form, name, value) {
 }
 
 function renderStage(stage) {
+  state.currentStage = stage || null;
   if (!stage) {
     stagePanel.hidden = true;
     return;
   }
 
+  const localized = localizeStage(stage);
   stagePanel.hidden = false;
-  stageTitle.textContent = stage.title || "Trabajando";
-  stageDetail.textContent = stage.detail || "La transcripcion esta en curso.";
+  stageTitle.textContent = localized.title;
+  stageDetail.textContent = localized.detail;
 
   const progress = Number(stage.progress);
   if (Number.isFinite(progress)) {
@@ -76,7 +329,8 @@ function renderStage(stage) {
   (stage.steps || []).forEach((step) => {
     const item = document.createElement("span");
     item.className = `stage-step ${step.state || "pending"}`;
-    item.textContent = step.title || step.key;
+    const stepKey = step.title_i18n || (step.key ? `step.${step.key}` : "");
+    item.textContent = stepKey && hasTranslation(stepKey) ? t(stepKey, step.title_args) : step.title || step.key;
     stageSteps.appendChild(item);
   });
 }
@@ -99,9 +353,9 @@ function setFiles(files) {
 
 function renderSelection() {
   const parts = [];
-  if (state.videoFile) parts.push(`Media: ${state.videoFile.name}`);
-  if (state.referenceFile) parts.push(`Original: ${state.referenceFile.name}`);
-  selectionSummary.textContent = parts.length ? parts.join(" | ") : "Sin archivos seleccionados";
+  if (state.videoFile) parts.push(`${t("media")}: ${state.videoFile.name}`);
+  if (state.referenceFile) parts.push(`${t("original")}: ${state.referenceFile.name}`);
+  selectionSummary.textContent = parts.length ? parts.join(" | ") : t("noFiles");
   startButton.disabled = !state.videoFile;
 }
 
@@ -109,11 +363,14 @@ function resetAll() {
   state.videoFile = null;
   state.referenceFile = null;
   state.jobId = null;
+  state.currentStage = null;
   state.generated = [];
   state.words = [];
   state.referenceRaw = [];
   state.reference = [];
   state.merged = [];
+  state.downloads = {};
+  state.alignment = {};
   state.activeWordIndex = -1;
   state.autoOffsetSec = 0;
   state.referenceOffsetSec = 0;
@@ -178,18 +435,12 @@ startButton.addEventListener("click", async () => {
   progressTrack.hidden = false;
   uploadProgress.style.width = "0%";
   statusDot.className = "status-dot";
-  statusText.textContent = "Subiendo";
+  statusText.textContent = t("uploading");
   logTail.textContent = "";
   renderStage({
-    title: "Subiendo archivo",
-    detail: "El navegador esta enviando el audio/video y los subtitulos opcionales a la estacion de trabajo.",
+    key: "browserUpload",
     progress: 0,
-    steps: [
-      { title: "Subida", state: "active" },
-      { title: "Cola", state: "pending" },
-      { title: "Transcripcion", state: "pending" },
-      { title: "Revision", state: "pending" },
-    ],
+    steps: browserStageSteps("active", "pending", "pending", "pending"),
   });
 
   let payload;
@@ -197,18 +448,12 @@ startButton.addEventListener("click", async () => {
     payload = await uploadJob(form);
   } catch (error) {
     statusDot.className = "status-dot error";
-    statusText.textContent = "Error al subir";
+    statusText.textContent = t("uploadError");
     logTail.textContent = String(error.message || error);
     renderStage({
-      title: "Fallo en la subida",
-      detail: "El navegador no pudo enviar el archivo a la estacion de trabajo. Revisa la conexion e intentalo de nuevo.",
+      key: "uploadFailed",
       progress: null,
-      steps: [
-        { title: "Subida", state: "active" },
-        { title: "Cola", state: "pending" },
-        { title: "Transcripcion", state: "pending" },
-        { title: "Revision", state: "pending" },
-      ],
+      steps: browserStageSteps("active", "pending", "pending", "pending"),
     });
     startButton.disabled = false;
     return;
@@ -217,17 +462,11 @@ startButton.addEventListener("click", async () => {
   state.jobId = payload.job_id;
   uploadProgress.style.width = "100%";
   progressTrack.hidden = true;
-  statusText.textContent = "En cola";
+  statusText.textContent = t("queuedStatus");
   renderStage({
-    title: "Esperando turno",
-    detail: "El archivo ya esta subido y el trabajo esta entrando en la cola de procesamiento.",
+    key: "queued",
     progress: null,
-    steps: [
-      { title: "Subida", state: "done" },
-      { title: "Cola", state: "active" },
-      { title: "Transcripcion", state: "pending" },
-      { title: "Revision", state: "pending" },
-    ],
+    steps: browserStageSteps("done", "active", "pending", "pending"),
   });
   pollStatus();
 });
@@ -240,17 +479,13 @@ function uploadJob(form) {
       if (!event.lengthComputable) return;
       const percent = Math.round((event.loaded / event.total) * 100);
       uploadProgress.style.width = `${percent}%`;
-      statusText.textContent = `Subiendo ${percent}%`;
+      statusText.textContent = t("uploadingPercent", { percent });
       renderStage({
-        title: "Subiendo archivo",
-        detail: `Progreso de subida: ${percent}%. Los videos grandes pueden tardar un poco.`,
+        key: "browserUpload",
+        detail_i18n: "uploadProgress",
+        detail_args: { percent },
         progress: percent,
-        steps: [
-          { title: "Subida", state: "active" },
-          { title: "Cola", state: "pending" },
-          { title: "Transcripcion", state: "pending" },
-          { title: "Revision", state: "pending" },
-        ],
+        steps: browserStageSteps("active", "pending", "pending", "pending"),
       });
     });
     request.addEventListener("load", () => {
@@ -260,7 +495,7 @@ function uploadJob(form) {
         reject(new Error(request.responseText || `HTTP ${request.status}`));
       }
     });
-    request.addEventListener("error", () => reject(new Error("Error de red durante la subida.")));
+    request.addEventListener("error", () => reject(new Error(t("networkUploadError"))));
     request.send(form);
   });
 }
@@ -270,7 +505,8 @@ async function pollStatus() {
   const status = await response.json();
 
   statusBand.hidden = false;
-  statusText.textContent = status.stage?.title || status.status;
+  const localizedStage = localizeStage(status.stage);
+  statusText.textContent = localizedStage?.title || statusLabel(status.status);
   statusDot.className = `status-dot ${status.status}`;
   renderStage(status.stage);
   logTail.textContent = (status.log_tail || []).join("\n");
@@ -283,7 +519,7 @@ async function pollStatus() {
   }
 
   if (status.status === "error") {
-    statusText.textContent = status.error || "Error";
+    statusText.textContent = status.error || statusLabel("error");
     progressTrack.hidden = true;
     startButton.disabled = false;
     return;
@@ -298,6 +534,8 @@ async function loadResult() {
   state.generated = result.generated_cues || [];
   state.words = result.word_timestamps || [];
   state.referenceRaw = result.reference_cues || [];
+  state.downloads = result.downloads || {};
+  state.alignment = result.alignment || {};
   state.activeWordIndex = -1;
   state.autoOffsetSec = Number(result.alignment?.offset_sec || 0);
   state.referenceOffsetSec = state.autoOffsetSec;
@@ -307,7 +545,7 @@ async function loadResult() {
   state.merged = mergeCues(state.generated, state.reference);
 
   videoPlayer.src = result.video_url;
-  renderDownloads(result.downloads || {}, result.alignment || {});
+  renderDownloads(state.downloads, state.alignment);
   renderCueGrid();
   renderWordGrid();
   reviewLayout.hidden = false;
@@ -343,7 +581,7 @@ function renderDownloads(downloads, alignment) {
   const scale = Number(alignment.scale || 1);
   const matches = Number(alignment.matches || 0);
   const quality = alignment.quality || "none";
-  meta.textContent = `Offset auto: ${offset}ms | scale: ${scale.toFixed(6)} | matches: ${matches} | ${quality}`;
+  meta.textContent = `${t("autoOffset")}: ${offset}ms | scale: ${scale.toFixed(6)} | ${t("matches")}: ${matches} | ${quality}`;
   downloadRow.appendChild(meta);
 
   Object.entries(downloads).forEach(([kind, url]) => {
@@ -422,7 +660,7 @@ function renderWordGrid() {
     item.className = "word-row empty";
     item.innerHTML = `
       <div>-</div>
-      <div>Sin timestamps por palabra</div>
+      <div>${escapeHtml(t("noWordTimestamps"))}</div>
       <div>-</div>
     `;
     wordGrid.appendChild(item);
@@ -559,8 +797,42 @@ function updateElevenlabsModelControls() {
   if (model !== "scribe_v2") noVerbatim.checked = false;
 }
 
+function applyTranslations() {
+  state.uiLanguage = I18N[uiLanguage.value] ? uiLanguage.value : "es";
+  document.documentElement.lang = state.uiLanguage;
+
+  document.querySelectorAll("[data-i18n]").forEach((element) => {
+    element.textContent = t(element.dataset.i18n);
+  });
+
+  document.querySelectorAll("[data-i18n-title]").forEach((element) => {
+    element.title = t(element.dataset.i18nTitle);
+  });
+
+  document.querySelectorAll("[data-i18n-placeholder]").forEach((element) => {
+    element.placeholder = t(element.dataset.i18nPlaceholder);
+  });
+
+  renderSelection();
+  if (state.currentStage) {
+    statusText.textContent = localizeStage(state.currentStage).title;
+    renderStage(state.currentStage);
+  }
+  if (!reviewLayout.hidden) {
+    renderDownloads(state.downloads, state.alignment);
+    renderCueGrid();
+    renderWordGrid();
+    updateActive();
+  }
+}
+
 sttProvider.addEventListener("change", updateProviderControls);
 document.getElementById("elevenlabsModel").addEventListener("change", updateElevenlabsModelControls);
+uiLanguage.value = I18N[state.uiLanguage] ? state.uiLanguage : "es";
+uiLanguage.addEventListener("change", () => {
+  window.localStorage.setItem("filmSubtitleLab.uiLanguage", uiLanguage.value);
+  applyTranslations();
+});
 
 updateProviderControls();
-renderSelection();
+applyTranslations();

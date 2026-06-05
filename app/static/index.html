@@ -11,23 +11,29 @@
       <header class="topbar">
         <div>
           <h1>Film Subtitle Lab</h1>
-          <p>Transcripcion local con RTX 4090</p>
+          <p data-i18n="appSubtitle">Transcripcion local con RTX 4090</p>
         </div>
-        <span class="ghost-link">Local</span>
+        <label class="ui-language">
+          <span data-i18n="uiLanguage">Interfaz</span>
+          <select id="uiLanguage">
+            <option value="es">Espanol</option>
+            <option value="en">English</option>
+          </select>
+        </label>
       </header>
 
       <section class="upload-band" id="dropZone">
         <div class="drop-copy">
-          <span class="drop-kicker">Drop</span>
-          <strong>Video/audio + SRT/VTT opcional</strong>
+          <span class="drop-kicker" data-i18n="dropKicker">Arrastra</span>
+          <strong data-i18n="dropTitle">Video/audio + SRT/VTT opcional</strong>
           <small id="selectionSummary">Sin archivos seleccionados</small>
         </div>
         <div class="drop-actions">
           <label class="file-button">
             <input id="fileInput" type="file" multiple accept="video/*,audio/*,.srt,.vtt" />
-            Elegir archivos
+            <span data-i18n="chooseFiles">Elegir archivos</span>
           </label>
-          <button id="clearButton" type="button" class="secondary">Limpiar</button>
+          <button id="clearButton" type="button" class="secondary" data-i18n="clear">Limpiar</button>
         </div>
       </section>
 
@@ -40,19 +46,19 @@
           </select>
         </label>
         <label>
-          Idioma
+          <span data-i18n="audioLanguage">Idioma audio</span>
           <select id="language">
-            <option value="en">English</option>
-            <option value="es">Spanish</option>
-            <option value="auto">Auto</option>
-            <option value="fr">French</option>
-            <option value="de">German</option>
-            <option value="it">Italian</option>
+            <option value="en" data-i18n="langEnglish">English</option>
+            <option value="es" data-i18n="langSpanish">Espanol</option>
+            <option value="auto" data-i18n="langAuto">Auto</option>
+            <option value="fr" data-i18n="langFrench">Frances</option>
+            <option value="de" data-i18n="langGerman">Aleman</option>
+            <option value="it" data-i18n="langItalian">Italiano</option>
           </select>
         </label>
         <div class="provider-controls" id="localControls">
           <label>
-            Modelo
+            <span data-i18n="localModel">Modelo</span>
             <select id="model">
               <option value="large-v3">large-v3</option>
               <option value="large-v2">large-v2</option>
@@ -60,11 +66,11 @@
             </select>
           </label>
           <label>
-            Batch
+            <span data-i18n="batch">Lote</span>
             <input id="batchSize" type="number" min="1" max="32" value="8" />
           </label>
           <label>
-            Compute
+            <span data-i18n="compute">Calculo</span>
             <select id="computeType">
               <option value="float16">float16</option>
               <option value="int8">int8</option>
@@ -74,60 +80,60 @@
         </div>
         <div class="provider-controls elevenlabs-controls" id="elevenlabsControls" hidden>
           <label>
-            Modelo ElevenLabs
+            <span data-i18n="elevenModel">Modelo ElevenLabs</span>
             <select id="elevenlabsModel">
               <option value="scribe_v2">scribe_v2</option>
               <option value="scribe_v1">scribe_v1</option>
             </select>
           </label>
           <label>
-            Timestamps
+            <span data-i18n="timestamps">Timestamps</span>
             <select id="elevenlabsTimestamps">
               <option value="word">word</option>
               <option value="character">character</option>
             </select>
           </label>
           <label>
-            Speakers
-            <input id="elevenlabsSpeakers" type="number" min="1" max="32" placeholder="Auto" />
+            <span data-i18n="speakers">Hablantes</span>
+            <input id="elevenlabsSpeakers" type="number" min="1" max="32" placeholder="Auto" data-i18n-placeholder="auto" />
           </label>
           <label>
-            Temp
+            <span data-i18n="temperature">Temperatura</span>
             <input id="elevenlabsTemperature" type="number" min="0" max="2" step="0.1" value="0" />
           </label>
           <label>
-            Seed
+            <span data-i18n="seed">Seed</span>
             <input id="elevenlabsSeed" type="number" min="0" max="2147483647" value="42" />
           </label>
           <label class="check-label">
             <input id="elevenlabsDiarize" type="checkbox" checked />
-            Diarize
+            <span data-i18n="diarize">Diarizar</span>
           </label>
           <label class="check-label">
             <input id="elevenlabsAudioEvents" type="checkbox" />
-            Audio events
+            <span data-i18n="audioEvents">Eventos de audio</span>
           </label>
           <label class="check-label">
             <input id="elevenlabsNoVerbatim" type="checkbox" checked />
-            Clean filler
+            <span data-i18n="cleanFiller">Clean filler</span>
           </label>
           <label class="wide-control">
-            Keyterms
-            <input id="elevenlabsKeyterms" type="text" placeholder="names, places, technical terms" />
+            <span data-i18n="keyterms">Terminos clave</span>
+            <input id="elevenlabsKeyterms" type="text" placeholder="nombres, lugares, terminos tecnicos" data-i18n-placeholder="keytermsPlaceholder" />
           </label>
         </div>
-        <button id="startButton" type="button" class="primary" disabled>Transcribir</button>
+        <button id="startButton" type="button" class="primary" disabled data-i18n="transcribe">Transcribir</button>
       </section>
 
       <section class="status-band" id="statusBand" hidden>
         <div>
           <span class="status-dot" id="statusDot"></span>
-          <strong id="statusText">Preparando</strong>
+          <strong id="statusText" data-i18n="working">Preparando</strong>
         </div>
         <div class="stage-panel" id="stagePanel" hidden>
           <div class="stage-copy">
-            <strong id="stageTitle">Preparando</strong>
-            <span id="stageDetail">La transcripcion esta empezando.</span>
+            <strong id="stageTitle" data-i18n="working">Preparando</strong>
+            <span id="stageDetail" data-i18n="stageFallback">La transcripcion esta empezando.</span>
           </div>
           <div class="stage-progress" id="stageProgress" hidden>
             <div id="stageProgressFill"></div>
@@ -138,7 +144,7 @@
           <div id="uploadProgress"></div>
         </div>
         <details class="technical-log">
-          <summary>Log tecnico</summary>
+          <summary data-i18n="technicalLog">Log tecnico</summary>
           <pre id="logTail"></pre>
         </details>
       </section>
@@ -155,38 +161,38 @@
 
         <aside class="compare-panel">
           <div class="compare-header">
-            <h2>Comparacion sincronizada</h2>
+            <h2 data-i18n="comparisonTitle">Comparacion sincronizada</h2>
             <div class="compare-tools">
               <div class="toggles">
-                <label><input id="showGenerated" type="checkbox" checked /> Nuevo</label>
-                <label><input id="showReference" type="checkbox" checked /> Original</label>
+                <label><input id="showGenerated" type="checkbox" checked /> <span data-i18n="newSubtitles">Nuevo</span></label>
+                <label><input id="showReference" type="checkbox" checked /> <span data-i18n="originalSubtitles">Original</span></label>
               </div>
               <div class="offset-tools">
-                <button id="offsetMinus" type="button" title="Adelantar original 100 ms">-100ms</button>
+                <button id="offsetMinus" type="button" title="Adelantar original 100 ms" data-i18n-title="offsetMinusTitle">-100ms</button>
                 <label>
-                  Offset original
+                  <span data-i18n="originalOffset">Offset original</span>
                   <input id="offsetMs" type="number" step="50" value="0" />
                 </label>
-                <button id="offsetPlus" type="button" title="Retrasar original 100 ms">+100ms</button>
-                <button id="offsetReset" type="button" title="Volver al offset automatico">Auto</button>
+                <button id="offsetPlus" type="button" title="Retrasar original 100 ms" data-i18n-title="offsetPlusTitle">+100ms</button>
+                <button id="offsetReset" type="button" title="Volver al offset automatico" data-i18n-title="offsetResetTitle">Auto</button>
               </div>
             </div>
           </div>
           <div class="cue-grid-head">
-            <span>Tiempo</span>
-            <span>Nuevo</span>
-            <span>Original</span>
+            <span data-i18n="time">Tiempo</span>
+            <span data-i18n="newSubtitles">Nuevo</span>
+            <span data-i18n="originalSubtitles">Original</span>
           </div>
           <div class="cue-grid" id="cueGrid"></div>
           <div class="word-panel">
             <div class="word-header">
-              <h2>Timestamps palabra</h2>
+              <h2 data-i18n="wordTimestamps">Timestamps palabra</h2>
               <span id="wordCount">0</span>
             </div>
             <div class="word-grid-head">
-              <span>Tiempo</span>
-              <span>Palabra</span>
-              <span>Confianza</span>
+              <span data-i18n="time">Tiempo</span>
+              <span data-i18n="word">Palabra</span>
+              <span data-i18n="confidence">Confianza</span>
             </div>
             <div class="word-grid" id="wordGrid"></div>
           </div>
