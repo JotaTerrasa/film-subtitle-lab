@@ -314,6 +314,26 @@ video {
   margin: 0;
 }
 
+.word-header {
+  align-items: center;
+  border-bottom: 1px solid var(--line);
+  border-top: 1px solid var(--line);
+  display: flex;
+  justify-content: space-between;
+  padding: 12px 16px;
+}
+
+.word-header h2 {
+  font-size: 15px;
+  margin: 0;
+}
+
+.word-header span {
+  color: var(--muted);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
 .toggles label {
   color: var(--muted);
   font-size: 13px;
@@ -342,12 +362,24 @@ video {
 }
 
 .cue-grid-head,
-.cue-row {
+.cue-row,
+.word-grid-head,
+.word-row {
   display: grid;
+}
+
+.cue-grid-head,
+.cue-row {
   grid-template-columns: 92px minmax(0, 1fr) minmax(0, 1fr);
 }
 
-.cue-grid-head {
+.word-grid-head,
+.word-row {
+  grid-template-columns: 170px minmax(0, 1fr) 86px;
+}
+
+.cue-grid-head,
+.word-grid-head {
   background: #111518;
   border-bottom: 1px solid var(--line);
   color: var(--muted);
@@ -357,13 +389,17 @@ video {
 }
 
 .cue-grid-head span,
-.cue-row > div {
+.cue-row > div,
+.word-grid-head span,
+.word-row > div {
   border-right: 1px solid var(--line);
   padding: 10px;
 }
 
 .cue-grid-head span:last-child,
-.cue-row > div:last-child {
+.cue-row > div:last-child,
+.word-grid-head span:last-child,
+.word-row > div:last-child {
   border-right: 0;
 }
 
@@ -372,7 +408,13 @@ video {
   overflow: auto;
 }
 
-.cue-row {
+.word-grid {
+  max-height: 320px;
+  overflow: auto;
+}
+
+.cue-row,
+.word-row {
   background: transparent;
   border-bottom: 1px solid #283038;
   border-left: 0;
@@ -389,13 +431,21 @@ video {
 }
 
 .cue-row:hover,
-.cue-row.active {
+.cue-row.active,
+.word-row:hover,
+.word-row.active {
   background: #243039;
 }
 
-.cue-row .time {
+.cue-row .time,
+.word-row .time {
   color: var(--muted);
   font-variant-numeric: tabular-nums;
+}
+
+.word-row.empty {
+  color: var(--muted);
+  cursor: default;
 }
 
 .empty-cell {
@@ -432,8 +482,15 @@ video {
     grid-template-columns: 82px minmax(0, 1fr);
   }
 
+  .word-grid-head,
+  .word-row {
+    grid-template-columns: 132px minmax(0, 1fr);
+  }
+
   .cue-grid-head span:nth-child(3),
-  .cue-row > div:nth-child(3) {
+  .cue-row > div:nth-child(3),
+  .word-grid-head span:nth-child(3),
+  .word-row > div:nth-child(3) {
     display: none;
   }
 }

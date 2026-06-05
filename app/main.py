@@ -405,6 +405,54 @@ def write_tsv(path: Path, cues: List[Dict[str, Any]]) -> None:
     path.write_text("\n".join(rows) + "\n", encoding="utf-8")
 
 
+def extract_word_timestamps(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+    candidates: List[Dict[str, Any]] = []
+    if isinstance(payload.get("word_segments"), list):
+        candidates.extend(payload["word_segments"])
+    elif isinstance(payload.get("words"), list):
+        candidates.extend(payload["words"])
+    elif isinstance(payload.get("segments"), list):
+        for segment_index, segment in enumerate(payload["segments"]):
+            for item in segment.get("words") or []:
+                if isinstance(item, dict):
+                    candidates.append({**item, "segment_index": segment_index})
+
+    words: List[Dict[str, Any]] = []
+    for item in candidates:
+        if not isinstance(item, dict):
+            continue
+        text = str(item.get("word") or item.get("text") or "").strip()
+        start = item.get("start")
+        end = item.get("end")
+        if not text or start is None or end is None:
+            continue
+
+        word: Dict[str, Any] = {
+            "index": len(words) + 1,
+            "start": round(float(start), 3),
+            "end": round(float(end), 3),
+            "text": text,
+        }
+        if item.get("score") is not None:
+            word["score"] = round(float(item["score"]), 4)
+        if item.get("speaker") is not None:
+            word["speaker"] = item["speaker"]
+        if item.get("segment_index") is not None:
+            word["segment_index"] = item["segment_index"]
+        words.append(word)
+
+    return words
+
+
+def load_json_payload(path: Optional[Path]) -> Dict[str, Any]:
+    if not path or not path.exists():
+        return {}
+    try:
+        return json.loads(path.read_text(encoding="utf-8", errors="replace"))
+    except Exception:
+        return {}
+
+
 def write_elevenlabs_outputs(job: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, str]:
     output_dir = Path(job["output_dir"])
     stem = Path(job["video_path"]).stem
@@ -706,6 +754,7 @@ def job_result(job_id: str) -> Dict[str, Any]:
     reference_path = Path(job["reference_path"]) if job.get("reference_path") else None
     generated_cues = parse_subtitle_file(generated_srt or generated_vtt)
     reference_cues = parse_subtitle_file(reference_path)
+    word_timestamps = extract_word_timestamps(load_json_payload(generated_json))
     alignment = estimate_reference_alignment(generated_cues, reference_cues)
 
     return {
@@ -714,6 +763,7 @@ def job_result(job_id: str) -> Dict[str, Any]:
         "video_name": job["video_name"],
         "video_url": f"/api/jobs/{job_id}/video",
         "generated_cues": generated_cues,
+        "word_timestamps": word_timestamps,
         "reference_cues": reference_cues,
         "alignment": alignment,
         "downloads": {

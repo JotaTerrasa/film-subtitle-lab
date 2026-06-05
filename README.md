@@ -14,6 +14,7 @@ The app is designed for a Windows workstation with an NVIDIA RTX GPU, Docker Des
 - Configurable language, Whisper model, batch size, and compute type.
 - Generated downloads in SRT, VTT, JSON, TXT, and TSV formats.
 - Side-by-side generated/reference subtitle review.
+- Word-level timestamp table for both WhisperX and ElevenLabs jobs.
 - Embedded media player with synchronized subtitle overlay.
 - Automatic reference subtitle alignment using offset and timing scale estimation.
 - Manual reference offset controls for fine tuning without retranscribing.
@@ -150,7 +151,8 @@ By default, the tunnel script does not enable Basic Auth. Treat the printed URL 
 6. Click the transcription button.
 7. Wait for upload and transcription to finish.
 8. Review generated and reference subtitles in the synchronized comparison view.
-9. Download the generated subtitle files.
+9. Inspect word-level timestamps and click a word row to jump the player to that point.
+10. Download the generated subtitle files.
 
 ## STT Providers
 
@@ -168,7 +170,7 @@ The local provider uses the UI's Whisper model, batch size, and compute type con
 
 ### ElevenLabs
 
-The ElevenLabs provider uploads the media file from the backend container to the ElevenLabs Speech to Text API and converts the response into the same SRT, VTT, JSON, TXT, and TSV outputs used by the local provider.
+The ElevenLabs provider uploads the media file from the backend container to the ElevenLabs Speech to Text API and converts the response into the same SRT, VTT, JSON, TXT, TSV, and frontend word timestamp views used by the local provider.
 
 Before starting the app, set your API key in the PowerShell session:
 

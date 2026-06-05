@@ -3,9 +3,11 @@ const state = {
   referenceFile: null,
   jobId: null,
   generated: [],
+  words: [],
   referenceRaw: [],
   reference: [],
   merged: [],
+  activeWordIndex: -1,
   autoOffsetSec: 0,
   referenceOffsetSec: 0,
   referenceScale: 1,
@@ -27,6 +29,8 @@ const videoPlayer = document.getElementById("videoPlayer");
 const activeGenerated = document.getElementById("activeGenerated");
 const activeReference = document.getElementById("activeReference");
 const cueGrid = document.getElementById("cueGrid");
+const wordGrid = document.getElementById("wordGrid");
+const wordCount = document.getElementById("wordCount");
 const downloadRow = document.getElementById("downloadRow");
 const sttProvider = document.getElementById("sttProvider");
 const showGenerated = document.getElementById("showGenerated");
@@ -65,9 +69,11 @@ function resetAll() {
   state.referenceFile = null;
   state.jobId = null;
   state.generated = [];
+  state.words = [];
   state.referenceRaw = [];
   state.reference = [];
   state.merged = [];
+  state.activeWordIndex = -1;
   state.autoOffsetSec = 0;
   state.referenceOffsetSec = 0;
   state.referenceScale = 1;
@@ -186,7 +192,9 @@ async function loadResult() {
   const response = await fetch(`/api/jobs/${state.jobId}/result`);
   const result = await response.json();
   state.generated = result.generated_cues || [];
+  state.words = result.word_timestamps || [];
   state.referenceRaw = result.reference_cues || [];
+  state.activeWordIndex = -1;
   state.autoOffsetSec = Number(result.alignment?.offset_sec || 0);
   state.referenceOffsetSec = state.autoOffsetSec;
   state.referenceScale = Number(result.alignment?.scale || 1);
@@ -197,6 +205,7 @@ async function loadResult() {
   videoPlayer.src = result.video_url;
   renderDownloads(result.downloads || {}, result.alignment || {});
   renderCueGrid();
+  renderWordGrid();
   reviewLayout.hidden = false;
   startButton.disabled = false;
 }
@@ -291,6 +300,49 @@ function renderCueGrid() {
   });
 }
 
+function formatTimeRange(start, end) {
+  return `${formatTime(start)} - ${formatTime(end)}`;
+}
+
+function formatScore(score) {
+  const value = Number(score);
+  return Number.isFinite(value) ? value.toFixed(2) : "-";
+}
+
+function renderWordGrid() {
+  wordGrid.innerHTML = "";
+  wordCount.textContent = String(state.words.length);
+
+  if (!state.words.length) {
+    const item = document.createElement("div");
+    item.className = "word-row empty";
+    item.innerHTML = `
+      <div>-</div>
+      <div>Sin timestamps por palabra</div>
+      <div>-</div>
+    `;
+    wordGrid.appendChild(item);
+    return;
+  }
+
+  state.words.forEach((word, index) => {
+    const item = document.createElement("button");
+    item.type = "button";
+    item.className = "word-row";
+    item.dataset.index = String(index);
+    item.innerHTML = `
+      <div class="time">${formatTimeRange(word.start, word.end)}</div>
+      <div>${escapeHtml(word.text)}</div>
+      <div>${formatScore(word.score)}</div>
+    `;
+    item.addEventListener("click", () => {
+      videoPlayer.currentTime = Math.max(0, Number(word.start) || 0);
+      videoPlayer.play();
+    });
+    wordGrid.appendChild(item);
+  });
+}
+
 function escapeHtml(value) {
   return String(value)
     .replaceAll("&", "&amp;")
@@ -303,10 +355,24 @@ function activeCue(cues, time) {
   return cues.find((cue) => time >= cue.start && time <= cue.end) || null;
 }
 
+function activeWordIndex(words, time) {
+  let low = 0;
+  let high = words.length - 1;
+  while (low <= high) {
+    const middle = Math.floor((low + high) / 2);
+    const word = words[middle];
+    if (time < word.start) high = middle - 1;
+    else if (time > word.end) low = middle + 1;
+    else return middle;
+  }
+  return -1;
+}
+
 function updateActive() {
   const time = videoPlayer.currentTime || 0;
   const generated = activeCue(state.generated, time);
   const reference = activeCue(state.reference, time);
+  const wordIndex = activeWordIndex(state.words, time);
 
   activeGenerated.textContent = showGenerated.checked && generated ? generated.text : "";
   activeReference.textContent = showReference.checked && reference ? reference.text : "";
@@ -325,6 +391,23 @@ function updateActive() {
     const row = rows[activeIndex];
     const gridTop = cueGrid.scrollTop;
     const gridBottom = gridTop + cueGrid.clientHeight;
+    if (row.offsetTop < gridTop || row.offsetTop + row.offsetHeight > gridBottom) {
+      row.scrollIntoView({ block: "nearest" });
+    }
+  }
+
+  if (wordIndex === state.activeWordIndex) return;
+  state.activeWordIndex = wordIndex;
+
+  const wordRows = wordGrid.querySelectorAll(".word-row");
+  wordRows.forEach((row, index) => {
+    row.classList.toggle("active", index === wordIndex);
+  });
+
+  if (wordIndex >= 0) {
+    const row = wordRows[wordIndex];
+    const gridTop = wordGrid.scrollTop;
+    const gridBottom = gridTop + wordGrid.clientHeight;
     if (row.offsetTop < gridTop || row.offsetTop + row.offsetHeight > gridBottom) {
       row.scrollIntoView({ block: "nearest" });
     }

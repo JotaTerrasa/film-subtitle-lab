@@ -70,6 +70,7 @@ host data/models -> container /models
 5. When transcription succeeds, output paths are stored in job metadata.
 6. The browser fetches `/api/jobs/{job_id}/result`.
 7. Generated and reference cues are parsed and returned with alignment metadata.
+8. Provider-specific word timestamp shapes are normalized into `word_timestamps` for the browser UI.
 
 ## Provider Behavior
 
@@ -78,6 +79,7 @@ Local WhisperX:
 - Runs in the Docker container.
 - Uses CUDA and the workstation GPU.
 - Produces WhisperX native outputs directly.
+- Exposes word timings from `word_segments` or `segments[].words`.
 
 ElevenLabs:
 
@@ -85,6 +87,7 @@ ElevenLabs:
 - Sends the uploaded media file to `https://api.elevenlabs.io/v1/speech-to-text`.
 - Uses `scribe_v2` unless `ELEVENLABS_STT_MODEL` overrides it.
 - Converts the returned word timestamps into local SRT, VTT, JSON, TXT, and TSV outputs.
+- Exposes returned word timings through the same frontend table as WhisperX.
 
 ## Alignment Flow
 
