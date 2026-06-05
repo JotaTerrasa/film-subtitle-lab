@@ -53,6 +53,28 @@ select {
   margin: 6px 0 0;
 }
 
+.topbar-actions {
+  align-items: end;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.pitch-button {
+  border-color: color-mix(in srgb, var(--accent), var(--line) 35%);
+  color: #bdf4d9;
+  min-width: 148px;
+}
+
+.pitch-status {
+  color: var(--muted);
+  font-size: 12px;
+  min-height: 16px;
+  min-width: 120px;
+  text-align: right;
+}
+
 .ui-language {
   color: var(--muted);
   display: grid;
@@ -701,6 +723,16 @@ video {
 
   .ui-language {
     margin-top: 14px;
+  }
+
+  .topbar-actions {
+    align-items: start;
+    justify-content: flex-start;
+    margin-top: 14px;
+  }
+
+  .pitch-status {
+    text-align: left;
   }
 
   .drop-actions {

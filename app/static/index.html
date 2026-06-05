@@ -13,13 +13,20 @@
           <h1>Film Subtitle Lab</h1>
           <p data-i18n="appSubtitle">Transcripcion local con RTX 4090</p>
         </div>
-        <label class="ui-language">
-          <span data-i18n="uiLanguage">Interfaz</span>
-          <select id="uiLanguage">
-            <option value="es">Espanol</option>
-            <option value="en">English</option>
-          </select>
-        </label>
+        <div class="topbar-actions">
+          <button id="pitchButton" type="button" class="secondary pitch-button" data-i18n="hackathonPitch">
+            Explicar proyecto
+          </button>
+          <span id="pitchStatus" class="pitch-status" aria-live="polite"></span>
+          <audio id="pitchAudio"></audio>
+          <label class="ui-language">
+            <span data-i18n="uiLanguage">Interfaz</span>
+            <select id="uiLanguage">
+              <option value="es">Espanol</option>
+              <option value="en">English</option>
+            </select>
+          </label>
+        </div>
       </header>
 
       <section class="upload-band" id="dropZone">

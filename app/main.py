@@ -34,8 +34,11 @@ app = FastAPI(title="Film Subtitle Lab")
 app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
 
 ELEVENLABS_STT_URL = "https://api.elevenlabs.io/v1/speech-to-text"
+ELEVENLABS_TTS_URL = "https://api.elevenlabs.io/v1/text-to-speech"
 ELEVENLABS_MODELS = {"scribe_v2", "scribe_v1"}
 ELEVENLABS_TIMESTAMP_GRANULARITIES = {"word", "character"}
+DEFAULT_ELEVENLABS_TTS_MODEL = "eleven_multilingual_v2"
+DEFAULT_ELEVENLABS_TTS_VOICE_ID = "21m00Tcm4TlvDq8ikWAM"
 
 executor = ThreadPoolExecutor(max_workers=1)
 jobs_lock = threading.Lock()
@@ -950,6 +953,51 @@ def format_elevenlabs_error(response: requests.Response) -> str:
     return f"{base}: {' - '.join(parts)}" if parts else base
 
 
+def hackathon_pitch_text(language: str) -> str:
+    if language == "en":
+        return (
+            "Welcome to Film Subtitle Lab. "
+            "This project turns subtitle production from a black box into an inspectable workflow. "
+            "You upload a film clip and, optionally, an existing subtitle file. "
+            "The app transcribes with local WhisperX on an RTX GPU, or falls back to ElevenLabs hosted speech to text. "
+            "Then it uses word-level timestamps to re-sync the original subtitles, preserving the editor's text while fixing the timing. "
+            "The key demo is the visual timeline: a waveform, generated subtitle lanes, original subtitle lanes, and match indicators. "
+            "Judges can see exactly where the subtitles hit the audio, not just trust a generated file. "
+            "At the end, you export production-ready SRT, VTT, JSON, TXT, TSV, and synchronized original subtitles. "
+            "Film Subtitle Lab is built for real post-production: fast, visual, and verifiable."
+        )
+
+    return (
+        "Bienvenidos a Film Subtitle Lab. "
+        "Este proyecto convierte la creacion de subtitulos en un flujo visual y verificable. "
+        "Subes un clip de video y, si quieres, un archivo de subtitulos existente. "
+        "La app transcribe con WhisperX local usando una RTX, o con ElevenLabs como servicio alojado. "
+        "Despues usa timestamps palabra por palabra para resincronizar el subtitulo original, conservando el texto del editor y corrigiendo los tiempos. "
+        "La parte diferencial de la demo es la linea de tiempo visual: onda de audio, carriles de subtitulos generados, carriles de subtitulos originales y marcadores de match. "
+        "El jurado puede ver exactamente donde encaja cada subtitulo con el audio, no solo confiar en un archivo generado. "
+        "Al final exportas SRT, VTT, JSON, TXT, TSV y tambien el subtitulo original sincronizado. "
+        "Film Subtitle Lab esta pensado para postproduccion real: rapido, visual y comprobable."
+    )
+
+
+def format_elevenlabs_tts_error(response: requests.Response) -> str:
+    base = f"ElevenLabs TTS returned HTTP {response.status_code}"
+    try:
+        payload = response.json()
+    except Exception:
+        return f"{base}: {response.text[:500]}"
+
+    detail = payload.get("detail") if isinstance(payload, dict) else None
+    if isinstance(detail, dict):
+        status = str(detail.get("status") or "").strip()
+        message = str(detail.get("message") or "").strip()
+        parts = [part for part in [status, message] if part]
+        return f"{base}: {' - '.join(parts)}" if parts else base
+    if detail:
+        return f"{base}: {detail}"
+    return base
+
+
 def parse_keyterms(value: str) -> List[str]:
     terms = []
     for raw in re.split(r"[\n,]+", value or ""):
@@ -1364,6 +1412,53 @@ load_existing_jobs()
 @app.get("/")
 def index() -> FileResponse:
     return FileResponse(APP_DIR / "static" / "index.html")
+
+
+@app.get("/api/hackathon-pitch/audio")
+def hackathon_pitch_audio(language: str = "es") -> Response:
+    api_key = os.getenv("ELEVENLABS_API_KEY", "").strip()
+    if not api_key:
+        raise HTTPException(status_code=503, detail="ELEVENLABS_API_KEY is not set in the container environment.")
+
+    normalized_language = "en" if str(language).lower().startswith("en") else "es"
+    voice_id = os.getenv("ELEVENLABS_TTS_VOICE_ID", DEFAULT_ELEVENLABS_TTS_VOICE_ID).strip()
+    model_id = os.getenv("ELEVENLABS_TTS_MODEL", DEFAULT_ELEVENLABS_TTS_MODEL).strip() or DEFAULT_ELEVENLABS_TTS_MODEL
+    payload = {
+        "text": hackathon_pitch_text(normalized_language),
+        "model_id": model_id,
+        "voice_settings": {
+            "stability": 0.48,
+            "similarity_boost": 0.78,
+            "style": 0.18,
+            "use_speaker_boost": True,
+        },
+    }
+
+    try:
+        response = requests.post(
+            f"{ELEVENLABS_TTS_URL}/{voice_id}",
+            headers={
+                "xi-api-key": api_key,
+                "Accept": "audio/mpeg",
+                "Content-Type": "application/json",
+            },
+            json=payload,
+            timeout=120,
+        )
+    except requests.RequestException as exc:
+        raise HTTPException(status_code=502, detail=f"ElevenLabs TTS request failed: {exc}") from exc
+
+    if response.status_code >= 400:
+        raise HTTPException(status_code=502, detail=format_elevenlabs_tts_error(response))
+
+    media_type = response.headers.get("content-type", "audio/mpeg").split(";", 1)[0] or "audio/mpeg"
+    return Response(
+        content=response.content,
+        media_type=media_type,
+        headers={
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @app.post("/api/jobs")

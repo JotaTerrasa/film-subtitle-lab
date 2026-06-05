@@ -11,6 +11,7 @@ The app is designed for a Windows workstation with an NVIDIA RTX GPU, Docker Des
 - Selectable STT provider: local WhisperX on the workstation GPU or ElevenLabs hosted STT.
 - WhisperX transcription inside a CUDA 12.8 Docker image.
 - ElevenLabs Scribe transcription through the Speech to Text API.
+- One-click hackathon presenter voiceover using ElevenLabs Text to Speech.
 - Configurable language, Whisper model, batch size, and compute type.
 - Generated downloads in SRT, VTT, JSON, TXT, and TSV formats.
 - Side-by-side generated/reference subtitle review.
@@ -147,16 +148,17 @@ By default, the tunnel script does not enable Basic Auth. Treat the printed URL 
 ## Using The App
 
 1. Open the local or tunneled URL in a browser.
-2. Drop a video/audio file into the upload area.
-3. Optionally drop an existing `.srt` or `.vtt` file to compare against.
-4. Select the STT provider.
-5. Select language, model, batch size, and compute type. Model, batch, and compute apply to local WhisperX.
-6. Click the transcription button.
-7. Wait for upload and transcription to finish.
-8. Review generated and reference subtitles in the synchronized comparison view.
-9. Inspect word-level timestamps and click a word row to jump the player to that point.
-10. If you uploaded an existing subtitle file, download the `SYNC_*` files to keep the original text with corrected timings.
-11. Download the generated subtitle files.
+2. Use `Explain project` if you want the app to narrate a short hackathon pitch with ElevenLabs TTS.
+3. Drop a video/audio file into the upload area.
+4. Optionally drop an existing `.srt` or `.vtt` file to compare against.
+5. Select the STT provider.
+6. Select language, model, batch size, and compute type. Model, batch, and compute apply to local WhisperX.
+7. Click the transcription button.
+8. Wait for upload and transcription to finish.
+9. Review generated and reference subtitles in the synchronized comparison view.
+10. Inspect word-level timestamps and click a word row to jump the player to that point.
+11. If you uploaded an existing subtitle file, download the `SYNC_*` files to keep the original text with corrected timings.
+12. Download the generated subtitle files.
 
 ## STT Providers
 
@@ -328,6 +330,8 @@ Important environment variables:
 | `APP_PASSWORD` | empty | Basic Auth password; if empty, auth is disabled |
 | `ELEVENLABS_API_KEY` | empty | Required only when using the ElevenLabs STT provider |
 | `ELEVENLABS_STT_MODEL` | `scribe_v2` | ElevenLabs STT model ID |
+| `ELEVENLABS_TTS_MODEL` | `eleven_multilingual_v2` | ElevenLabs TTS model used by the hackathon pitch button |
+| `ELEVENLABS_TTS_VOICE_ID` | `21m00Tcm4TlvDq8ikWAM` | ElevenLabs voice ID used by the hackathon pitch button |
 
 ## Troubleshooting
 

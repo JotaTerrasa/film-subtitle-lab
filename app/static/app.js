@@ -62,6 +62,9 @@ const offsetMinus = document.getElementById("offsetMinus");
 const offsetPlus = document.getElementById("offsetPlus");
 const offsetReset = document.getElementById("offsetReset");
 const uiLanguage = document.getElementById("uiLanguage");
+const pitchButton = document.getElementById("pitchButton");
+const pitchStatus = document.getElementById("pitchStatus");
+const pitchAudio = document.getElementById("pitchAudio");
 
 const I18N = {
   es: {
@@ -92,6 +95,11 @@ const I18N = {
     keyterms: "Terminos clave",
     keytermsPlaceholder: "nombres, lugares, terminos tecnicos",
     auto: "Auto",
+    hackathonPitch: "Explicar proyecto",
+    pitchGenerating: "Generando voz...",
+    pitchPlaying: "Reproduciendo pitch",
+    pitchReady: "Pitch listo",
+    pitchError: "No se pudo generar el pitch",
     transcribe: "Transcribir",
     technicalLog: "Log tecnico",
     comparisonTitle: "Comparacion sincronizada",
@@ -207,6 +215,11 @@ const I18N = {
     keyterms: "Keyterms",
     keytermsPlaceholder: "names, places, technical terms",
     auto: "Auto",
+    hackathonPitch: "Explain project",
+    pitchGenerating: "Generating voice...",
+    pitchPlaying: "Playing pitch",
+    pitchReady: "Pitch ready",
+    pitchError: "Could not generate pitch",
     transcribe: "Transcribe",
     technicalLog: "Technical log",
     comparisonTitle: "Synchronized comparison",
@@ -1108,6 +1121,38 @@ function updateElevenlabsModelControls() {
   if (model !== "scribe_v2") noVerbatim.checked = false;
 }
 
+async function playHackathonPitch() {
+  pitchButton.disabled = true;
+  pitchStatus.textContent = t("pitchGenerating");
+  try {
+    const response = await fetch(`/api/hackathon-pitch/audio?language=${encodeURIComponent(getUiLanguage())}`, {
+      cache: "no-store",
+    });
+    if (!response.ok) {
+      let detail = await response.text();
+      try {
+        detail = JSON.parse(detail).detail || detail;
+      } catch {
+        // Keep the plain response text.
+      }
+      throw new Error(detail || `HTTP ${response.status}`);
+    }
+
+    const audioBlob = await response.blob();
+    if (pitchAudio.dataset.objectUrl) {
+      URL.revokeObjectURL(pitchAudio.dataset.objectUrl);
+    }
+    const audioUrl = URL.createObjectURL(audioBlob);
+    pitchAudio.dataset.objectUrl = audioUrl;
+    pitchAudio.src = audioUrl;
+    pitchStatus.textContent = t("pitchPlaying");
+    await pitchAudio.play();
+  } catch (error) {
+    pitchStatus.textContent = `${t("pitchError")}: ${error.message || error}`;
+    pitchButton.disabled = false;
+  }
+}
+
 function applyTranslations() {
   state.uiLanguage = I18N[uiLanguage.value] ? uiLanguage.value : "es";
   document.documentElement.lang = state.uiLanguage;
@@ -1142,6 +1187,15 @@ function applyTranslations() {
 
 sttProvider.addEventListener("change", updateProviderControls);
 document.getElementById("elevenlabsModel").addEventListener("change", updateElevenlabsModelControls);
+pitchButton.addEventListener("click", playHackathonPitch);
+pitchAudio.addEventListener("ended", () => {
+  pitchButton.disabled = false;
+  pitchStatus.textContent = t("pitchReady");
+});
+pitchAudio.addEventListener("error", () => {
+  pitchButton.disabled = false;
+  pitchStatus.textContent = t("pitchError");
+});
 uiLanguage.value = I18N[state.uiLanguage] ? state.uiLanguage : "es";
 uiLanguage.addEventListener("change", () => {
   window.localStorage.setItem("filmSubtitleLab.uiLanguage", uiLanguage.value);
