@@ -16,6 +16,7 @@ The app is designed for a Windows workstation with an NVIDIA RTX GPU, Docker Des
 - Side-by-side generated/reference subtitle review.
 - Word-level timestamp table for both WhisperX and ElevenLabs jobs.
 - Embedded media player with synchronized subtitle overlay.
+- Human-readable live progress stages during upload, transcription, alignment, and export.
 - Automatic reference subtitle alignment using offset and timing scale estimation.
 - Manual reference offset controls for fine tuning without retranscribing.
 - Persistent job/model folders mounted from the host.

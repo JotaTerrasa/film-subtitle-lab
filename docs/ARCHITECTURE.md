@@ -32,6 +32,7 @@ The browser UI is static HTML, CSS, and JavaScript served by FastAPI. The backen
 - WhisperX command construction.
 - ElevenLabs Speech to Text request construction.
 - Log capture.
+- Human-readable job stage reporting for the browser progress UI.
 - Subtitle parsing.
 - Reference subtitle alignment.
 - Download and media streaming endpoints.
@@ -67,10 +68,11 @@ host data/models -> container /models
 2. FastAPI creates a job folder and writes `job.json`.
 3. A background worker runs either the `whisperx` CLI or the ElevenLabs API request.
 4. Transcription progress and provider output are appended to `job.log`.
-5. When transcription succeeds, output paths are stored in job metadata.
-6. The browser fetches `/api/jobs/{job_id}/result`.
-7. Generated and reference cues are parsed and returned with alignment metadata.
-8. Provider-specific word timestamp shapes are normalized into `word_timestamps` for the browser UI.
+5. A high-level stage is updated for the browser, such as voice detection, transcription, alignment, hosted API processing, or subtitle export.
+6. When transcription succeeds, output paths are stored in job metadata.
+7. The browser fetches `/api/jobs/{job_id}/result`.
+8. Generated and reference cues are parsed and returned with alignment metadata.
+9. Provider-specific word timestamp shapes are normalized into `word_timestamps` for the browser UI.
 
 ## Provider Behavior
 

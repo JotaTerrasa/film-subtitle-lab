@@ -124,10 +124,23 @@
           <span class="status-dot" id="statusDot"></span>
           <strong id="statusText">Preparando</strong>
         </div>
+        <div class="stage-panel" id="stagePanel" hidden>
+          <div class="stage-copy">
+            <strong id="stageTitle">Preparando</strong>
+            <span id="stageDetail">La transcripcion esta empezando.</span>
+          </div>
+          <div class="stage-progress" id="stageProgress" hidden>
+            <div id="stageProgressFill"></div>
+          </div>
+          <div class="stage-steps" id="stageSteps"></div>
+        </div>
         <div class="progress-track" id="progressTrack" hidden>
           <div id="uploadProgress"></div>
         </div>
-        <pre id="logTail"></pre>
+        <details class="technical-log">
+          <summary>Log tecnico</summary>
+          <pre id="logTail"></pre>
+        </details>
       </section>
 
       <section class="review-layout" id="reviewLayout" hidden>

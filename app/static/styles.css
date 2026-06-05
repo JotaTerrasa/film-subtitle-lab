@@ -221,6 +221,67 @@ input[type="text"] {
   gap: 10px;
 }
 
+.stage-panel {
+  background: #111518;
+  border: 1px solid #283038;
+  margin-top: 14px;
+  padding: 14px;
+}
+
+.stage-copy {
+  display: grid;
+  gap: 5px;
+}
+
+.stage-copy strong {
+  font-size: 17px;
+}
+
+.stage-copy span {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.stage-progress {
+  background: #0d1012;
+  border: 1px solid #283038;
+  height: 8px;
+  margin-top: 12px;
+  overflow: hidden;
+}
+
+#stageProgressFill {
+  background: var(--accent);
+  height: 100%;
+  transition: width 180ms ease;
+  width: 0%;
+}
+
+.stage-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.stage-step {
+  border: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+  padding: 6px 8px;
+}
+
+.stage-step.done {
+  border-color: color-mix(in srgb, var(--accent), var(--line) 45%);
+  color: #bdf4d9;
+}
+
+.stage-step.active {
+  background: color-mix(in srgb, var(--accent), transparent 82%);
+  border-color: var(--accent);
+  color: var(--text);
+}
+
 .status-dot {
   background: var(--accent-2);
   border-radius: 50%;
@@ -235,6 +296,16 @@ input[type="text"] {
 
 .status-dot.error {
   background: var(--danger);
+}
+
+.technical-log {
+  margin-top: 14px;
+}
+
+.technical-log summary {
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
 }
 
 #logTail {

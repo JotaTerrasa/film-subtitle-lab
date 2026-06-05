@@ -62,6 +62,54 @@ WHISPERX_ENGLISH_QUALITY_ARGS = [
     "linear",
 ]
 
+PROVIDER_STEPS = {
+    "whisperx": ["queued", "prepare", "vad", "transcribe", "align", "export", "done"],
+    "elevenlabs": ["queued", "prepare", "upload", "remote", "export", "done"],
+}
+
+STAGE_COPY = {
+    "queued": (
+        "Esperando turno",
+        "El archivo esta guardado y el trabajo empezara cuando el procesador quede libre.",
+    ),
+    "prepare": (
+        "Preparando la transcripcion",
+        "El backend esta configurando modelo, GPU/cache, idioma y carpetas de salida.",
+    ),
+    "vad": (
+        "Detectando voz",
+        "WhisperX esta separando las partes con dialogo de silencios, musica o ruido.",
+    ),
+    "transcribe": (
+        "Transcribiendo dialogo",
+        "El motor STT esta convirtiendo la voz hablada en texto.",
+    ),
+    "align": (
+        "Alineando palabras",
+        "La app esta refinando timestamps por palabra para que los subtitulos caigan en su sitio.",
+    ),
+    "upload": (
+        "Enviando a ElevenLabs",
+        "El backend esta subiendo el archivo y las opciones elegidas al API alojado.",
+    ),
+    "remote": (
+        "Esperando respuesta de ElevenLabs",
+        "ElevenLabs esta procesando el audio y devolviendo texto con timestamps.",
+    ),
+    "export": (
+        "Generando subtitulos",
+        "La app esta convirtiendo la transcripcion a SRT, VTT, JSON, TXT, TSV y vista comparativa.",
+    ),
+    "done": (
+        "Listo para revisar",
+        "La transcripcion termino y los subtitulos estan listos para revisar o descargar.",
+    ),
+    "error": (
+        "Transcripcion detenida",
+        "El trabajo encontro un error. Revisa el mensaje y el log tecnico inferior.",
+    ),
+}
+
 
 @app.middleware("http")
 async def basic_auth(request: Request, call_next):
@@ -120,10 +168,86 @@ def set_job(job_id: str, **changes: Any) -> None:
         write_job(job)
 
 
+def set_stage(job_id: str, key: str, detail: Optional[str] = None, progress: Optional[float] = None) -> None:
+    title, default_detail = STAGE_COPY.get(key, (key.replace("_", " ").title(), "Trabajando en el paso actual."))
+    changes: Dict[str, Any] = {
+        "stage_key": key,
+        "stage_title": title,
+        "stage_detail": detail or default_detail,
+        "stage_progress": None,
+    }
+    if key == "error":
+        changes["stage_failed_key"] = jobs.get(job_id, {}).get("stage_key")
+    if progress is not None:
+        changes["stage_progress"] = round(max(0.0, min(100.0, float(progress))), 2)
+    set_job(job_id, **changes)
+
+
+def build_stage(job: Dict[str, Any]) -> Dict[str, Any]:
+    provider = job.get("stt_provider", "whisperx")
+    steps = PROVIDER_STEPS.get(provider, PROVIDER_STEPS["whisperx"])
+    key = job.get("stage_key") or job.get("status") or "queued"
+    if job.get("status") == "done":
+        key = "done"
+    elif job.get("status") == "error":
+        key = "error"
+
+    title = job.get("stage_title") or STAGE_COPY.get(key, ("Trabajando", ""))[0]
+    detail = job.get("stage_detail") or STAGE_COPY.get(key, ("", "Trabajando en el paso actual."))[1]
+    if key == "error":
+        failed_key = job.get("stage_failed_key")
+        current_index = steps.index(failed_key) if failed_key in steps else 0
+    else:
+        current_index = steps.index(key) if key in steps else 0
+    progress = job.get("stage_progress")
+    if key == "done":
+        progress = 100.0
+    elif key == "error":
+        progress = None
+
+    return {
+        "key": key,
+        "title": title,
+        "detail": detail,
+        "progress": progress,
+        "current_index": current_index,
+        "steps": [
+            {
+                "key": step,
+                "title": STAGE_COPY.get(step, (step.replace("_", " ").title(), ""))[0],
+                "state": "done" if idx < current_index else "active" if idx == current_index else "pending",
+            }
+            for idx, step in enumerate(steps)
+        ],
+    }
+
+
 def append_log(job_id: str, line: str) -> None:
     log_path = job_dir(job_id) / "job.log"
     with log_path.open("a", encoding="utf-8", errors="replace") as handle:
         handle.write(line.rstrip() + "\n")
+
+
+def update_whisperx_stage_from_log(job_id: str, line: str) -> None:
+    normalized = line.lower()
+    if "performing voice activity detection" in normalized:
+        set_stage(job_id, "vad")
+        return
+    if "performing transcription" in normalized:
+        set_stage(job_id, "transcribe", progress=0)
+        return
+    if "performing alignment" in normalized:
+        set_stage(job_id, "align", progress=0)
+        return
+
+    match = re.search(r"progress:\s*([0-9]+(?:\.[0-9]+)?)%", normalized)
+    if not match:
+        return
+
+    current = jobs.get(job_id, {}).get("stage_key", "transcribe")
+    if current not in {"transcribe", "align"}:
+        current = "transcribe"
+    set_stage(job_id, current, progress=float(match.group(1)))
 
 
 def log_tail(job_id: str, max_lines: int = 80) -> List[str]:
@@ -618,6 +742,11 @@ def run_whisperx_transcription(job_id: str) -> None:
         cmd.extend(["--language", job["language"]])
 
     set_job(job_id, status="running", started_at=now_iso(), command=cmd)
+    set_stage(
+        job_id,
+        "prepare",
+        f"Cargando WhisperX local ({job['model']}, {job['compute_type']}) y preparando la RTX para transcribir.",
+    )
     append_log(job_id, "+ " + " ".join(cmd))
 
     start = time.time()
@@ -633,13 +762,16 @@ def run_whisperx_transcription(job_id: str) -> None:
         assert process.stdout is not None
         for line in process.stdout:
             append_log(job_id, line)
+            update_whisperx_stage_from_log(job_id, line)
         return_code = process.wait()
         elapsed = round(time.time() - start, 2)
 
         if return_code != 0:
+            set_stage(job_id, "error", f"WhisperX termino con codigo {return_code}.")
             set_job(job_id, status="error", error=f"whisperx exited with code {return_code}", elapsed_sec=elapsed)
             return
 
+        set_stage(job_id, "export")
         generated = {
             "srt": str(find_output(job, "srt") or ""),
             "vtt": str(find_output(job, "vtt") or ""),
@@ -647,9 +779,11 @@ def run_whisperx_transcription(job_id: str) -> None:
             "txt": str(find_output(job, "txt") or ""),
             "tsv": str(find_output(job, "tsv") or ""),
         }
+        set_stage(job_id, "done")
         set_job(job_id, status="done", finished_at=now_iso(), elapsed_sec=elapsed, generated=generated)
     except Exception as exc:
         append_log(job_id, f"ERROR: {exc}")
+        set_stage(job_id, "error", str(exc))
         set_job(job_id, status="error", error=str(exc))
 
 
@@ -660,6 +794,7 @@ def run_elevenlabs_transcription(job_id: str) -> None:
 
     api_key = os.getenv("ELEVENLABS_API_KEY", "").strip()
     if not api_key:
+        set_stage(job_id, "error", "ElevenLabs no puede empezar porque falta la API key dentro del contenedor.")
         set_job(
             job_id,
             status="error",
@@ -711,6 +846,11 @@ def run_elevenlabs_transcription(job_id: str) -> None:
         "file": Path(job["video_path"]).name,
     }
     set_job(job_id, status="running", started_at=now_iso(), command=command_meta)
+    set_stage(
+        job_id,
+        "prepare",
+        f"Preparando ElevenLabs {model_id} con timestamps {timestamps} y las opciones elegidas.",
+    )
     append_log(
         job_id,
         (
@@ -723,6 +863,7 @@ def run_elevenlabs_transcription(job_id: str) -> None:
 
     start = time.time()
     try:
+        set_stage(job_id, "upload")
         with Path(job["video_path"]).open("rb") as handle:
             response = requests.post(
                 ELEVENLABS_STT_URL,
@@ -733,19 +874,24 @@ def run_elevenlabs_transcription(job_id: str) -> None:
             )
 
         elapsed = round(time.time() - start, 2)
+        set_stage(job_id, "remote", "ElevenLabs ya respondio; comprobando y desempaquetando la transcripcion.")
         append_log(job_id, f"ElevenLabs response: HTTP {response.status_code}")
         if response.status_code >= 400:
             error_message = format_elevenlabs_error(response)
             append_log(job_id, error_message)
             append_log(job_id, response.text[:2000])
+            set_stage(job_id, "error", error_message)
             set_job(job_id, status="error", error=error_message, elapsed_sec=elapsed)
             return
 
         payload = response.json()
+        set_stage(job_id, "export")
         generated = write_elevenlabs_outputs(job, payload)
+        set_stage(job_id, "done")
         set_job(job_id, status="done", finished_at=now_iso(), elapsed_sec=elapsed, generated=generated)
     except Exception as exc:
         append_log(job_id, f"ERROR: {exc}")
+        set_stage(job_id, "error", str(exc))
         set_job(job_id, status="error", error=str(exc))
 
 
@@ -766,6 +912,10 @@ def load_existing_jobs() -> None:
         if job.get("status") == "running":
             job["status"] = "error"
             job["error"] = "Interrupted while the container was stopped."
+            job["stage_key"] = "error"
+            job["stage_title"] = STAGE_COPY["error"][0]
+            job["stage_detail"] = "El contenedor se detuvo antes de que este trabajo terminara."
+            job["stage_progress"] = None
         jobs[job["id"]] = job
 
 
@@ -852,6 +1002,10 @@ async def create_job(
         "elevenlabs_tag_audio_events": elevenlabs_tag_audio_events,
         "elevenlabs_no_verbatim": elevenlabs_no_verbatim,
         "elevenlabs_keyterms": parse_keyterms(elevenlabs_keyterms),
+        "stage_key": "queued",
+        "stage_title": STAGE_COPY["queued"][0],
+        "stage_detail": STAGE_COPY["queued"][1],
+        "stage_progress": None,
         "generated": {},
         "error": "",
     }
@@ -878,6 +1032,7 @@ def job_status(job_id: str) -> Dict[str, Any]:
         "started_at": job.get("started_at"),
         "finished_at": job.get("finished_at"),
         "elapsed_sec": job.get("elapsed_sec"),
+        "stage": build_stage(job),
         "log_tail": log_tail(job_id),
     }
 

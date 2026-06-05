@@ -21,6 +21,12 @@ const selectionSummary = document.getElementById("selectionSummary");
 const statusBand = document.getElementById("statusBand");
 const statusText = document.getElementById("statusText");
 const statusDot = document.getElementById("statusDot");
+const stagePanel = document.getElementById("stagePanel");
+const stageTitle = document.getElementById("stageTitle");
+const stageDetail = document.getElementById("stageDetail");
+const stageProgress = document.getElementById("stageProgress");
+const stageProgressFill = document.getElementById("stageProgressFill");
+const stageSteps = document.getElementById("stageSteps");
 const logTail = document.getElementById("logTail");
 const progressTrack = document.getElementById("progressTrack");
 const uploadProgress = document.getElementById("uploadProgress");
@@ -45,6 +51,34 @@ const offsetReset = document.getElementById("offsetReset");
 function appendIfValue(form, name, value) {
   const trimmed = String(value || "").trim();
   if (trimmed) form.append(name, trimmed);
+}
+
+function renderStage(stage) {
+  if (!stage) {
+    stagePanel.hidden = true;
+    return;
+  }
+
+  stagePanel.hidden = false;
+  stageTitle.textContent = stage.title || "Trabajando";
+  stageDetail.textContent = stage.detail || "La transcripcion esta en curso.";
+
+  const progress = Number(stage.progress);
+  if (Number.isFinite(progress)) {
+    stageProgress.hidden = false;
+    stageProgressFill.style.width = `${Math.max(0, Math.min(100, progress))}%`;
+  } else {
+    stageProgress.hidden = true;
+    stageProgressFill.style.width = "0%";
+  }
+
+  stageSteps.innerHTML = "";
+  (stage.steps || []).forEach((step) => {
+    const item = document.createElement("span");
+    item.className = `stage-step ${step.state || "pending"}`;
+    item.textContent = step.title || step.key;
+    stageSteps.appendChild(item);
+  });
 }
 
 function isSubtitle(file) {
@@ -88,6 +122,7 @@ function resetAll() {
   statusBand.hidden = true;
   progressTrack.hidden = true;
   uploadProgress.style.width = "0%";
+  stagePanel.hidden = true;
   reviewLayout.hidden = true;
   renderSelection();
 }
@@ -145,6 +180,17 @@ startButton.addEventListener("click", async () => {
   statusDot.className = "status-dot";
   statusText.textContent = "Subiendo";
   logTail.textContent = "";
+  renderStage({
+    title: "Subiendo archivo",
+    detail: "El navegador esta enviando el audio/video y los subtitulos opcionales a la estacion de trabajo.",
+    progress: 0,
+    steps: [
+      { title: "Subida", state: "active" },
+      { title: "Cola", state: "pending" },
+      { title: "Transcripcion", state: "pending" },
+      { title: "Revision", state: "pending" },
+    ],
+  });
 
   let payload;
   try {
@@ -153,13 +199,36 @@ startButton.addEventListener("click", async () => {
     statusDot.className = "status-dot error";
     statusText.textContent = "Error al subir";
     logTail.textContent = String(error.message || error);
+    renderStage({
+      title: "Fallo en la subida",
+      detail: "El navegador no pudo enviar el archivo a la estacion de trabajo. Revisa la conexion e intentalo de nuevo.",
+      progress: null,
+      steps: [
+        { title: "Subida", state: "active" },
+        { title: "Cola", state: "pending" },
+        { title: "Transcripcion", state: "pending" },
+        { title: "Revision", state: "pending" },
+      ],
+    });
     startButton.disabled = false;
     return;
   }
 
   state.jobId = payload.job_id;
   uploadProgress.style.width = "100%";
+  progressTrack.hidden = true;
   statusText.textContent = "En cola";
+  renderStage({
+    title: "Esperando turno",
+    detail: "El archivo ya esta subido y el trabajo esta entrando en la cola de procesamiento.",
+    progress: null,
+    steps: [
+      { title: "Subida", state: "done" },
+      { title: "Cola", state: "active" },
+      { title: "Transcripcion", state: "pending" },
+      { title: "Revision", state: "pending" },
+    ],
+  });
   pollStatus();
 });
 
@@ -172,6 +241,17 @@ function uploadJob(form) {
       const percent = Math.round((event.loaded / event.total) * 100);
       uploadProgress.style.width = `${percent}%`;
       statusText.textContent = `Subiendo ${percent}%`;
+      renderStage({
+        title: "Subiendo archivo",
+        detail: `Progreso de subida: ${percent}%. Los videos grandes pueden tardar un poco.`,
+        progress: percent,
+        steps: [
+          { title: "Subida", state: "active" },
+          { title: "Cola", state: "pending" },
+          { title: "Transcripcion", state: "pending" },
+          { title: "Revision", state: "pending" },
+        ],
+      });
     });
     request.addEventListener("load", () => {
       if (request.status >= 200 && request.status < 300) {
@@ -190,8 +270,9 @@ async function pollStatus() {
   const status = await response.json();
 
   statusBand.hidden = false;
-  statusText.textContent = status.status;
+  statusText.textContent = status.stage?.title || status.status;
   statusDot.className = `status-dot ${status.status}`;
+  renderStage(status.stage);
   logTail.textContent = (status.log_tail || []).join("\n");
   logTail.scrollTop = logTail.scrollHeight;
 
