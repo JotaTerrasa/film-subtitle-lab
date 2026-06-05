@@ -181,6 +181,18 @@ For English jobs, the backend also applies an accuracy-oriented WhisperX profile
 
 The ElevenLabs provider uploads the media file from the backend container to the ElevenLabs Speech to Text API and converts the response into the same SRT, VTT, JSON, TXT, TSV, and frontend word timestamp views used by the local provider.
 
+When `ElevenLabs API` is selected, the UI switches away from local WhisperX controls and shows ElevenLabs-specific options:
+
+- Scribe model: `scribe_v2` or `scribe_v1`.
+- Timestamp granularity: `word` or `character`.
+- Speaker diarization and optional speaker count.
+- Audio event tagging.
+- Clean filler mode through `no_verbatim`.
+- Temperature and seed.
+- Optional keyterms for names, places, and technical vocabulary.
+
+`Clean filler` maps to ElevenLabs `no_verbatim` and is only sent when `scribe_v2` is selected.
+
 Before starting the app, set your API key in the PowerShell session:
 
 ```powershell

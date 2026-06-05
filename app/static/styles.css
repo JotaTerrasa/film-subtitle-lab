@@ -106,6 +106,7 @@ select {
 
 .drop-actions,
 .controls-band,
+.provider-controls,
 .download-row,
 .toggles,
 .compare-tools,
@@ -159,6 +160,14 @@ button:disabled {
   padding: 16px;
 }
 
+.provider-controls[hidden] {
+  display: none;
+}
+
+.elevenlabs-controls {
+  flex: 1 1 760px;
+}
+
 .controls-band label {
   color: var(--muted);
   display: grid;
@@ -167,13 +176,37 @@ button:disabled {
 }
 
 select,
-input[type="number"] {
+input[type="number"],
+input[type="text"] {
   background: #0d1012;
   border: 1px solid var(--line);
   color: var(--text);
   height: 40px;
   min-width: 120px;
   padding: 0 10px;
+}
+
+.check-label {
+  align-items: center;
+  display: flex !important;
+  gap: 8px !important;
+  height: 40px;
+  padding-top: 19px;
+}
+
+.check-label input {
+  height: 16px;
+  margin: 0;
+  width: 16px;
+}
+
+.wide-control {
+  flex: 1 1 260px;
+}
+
+.wide-control input {
+  min-width: 220px;
+  width: 100%;
 }
 
 .status-band {

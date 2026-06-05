@@ -86,7 +86,7 @@ ElevenLabs:
 
 - Requires `ELEVENLABS_API_KEY` in the container environment.
 - Sends the uploaded media file to `https://api.elevenlabs.io/v1/speech-to-text`.
-- Uses `scribe_v2` unless `ELEVENLABS_STT_MODEL` overrides it.
+- Uses the UI-selected Scribe model, timestamp granularity, diarization, speaker count, audio event, no-verbatim, temperature, seed, and keyterm options.
 - Converts the returned word timestamps into local SRT, VTT, JSON, TXT, and TSV outputs.
 - Exposes returned word timings through the same frontend table as WhisperX.
 

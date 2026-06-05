@@ -50,26 +50,72 @@
             <option value="it">Italian</option>
           </select>
         </label>
-        <label>
-          Modelo
-          <select id="model">
-            <option value="large-v3">large-v3</option>
-            <option value="large-v2">large-v2</option>
-            <option value="medium">medium</option>
-          </select>
-        </label>
-        <label>
-          Batch
-          <input id="batchSize" type="number" min="1" max="32" value="8" />
-        </label>
-        <label>
-          Compute
-          <select id="computeType">
-            <option value="float16">float16</option>
-            <option value="int8">int8</option>
-            <option value="float32">float32</option>
-          </select>
-        </label>
+        <div class="provider-controls" id="localControls">
+          <label>
+            Modelo
+            <select id="model">
+              <option value="large-v3">large-v3</option>
+              <option value="large-v2">large-v2</option>
+              <option value="medium">medium</option>
+            </select>
+          </label>
+          <label>
+            Batch
+            <input id="batchSize" type="number" min="1" max="32" value="8" />
+          </label>
+          <label>
+            Compute
+            <select id="computeType">
+              <option value="float16">float16</option>
+              <option value="int8">int8</option>
+              <option value="float32">float32</option>
+            </select>
+          </label>
+        </div>
+        <div class="provider-controls elevenlabs-controls" id="elevenlabsControls" hidden>
+          <label>
+            Modelo ElevenLabs
+            <select id="elevenlabsModel">
+              <option value="scribe_v2">scribe_v2</option>
+              <option value="scribe_v1">scribe_v1</option>
+            </select>
+          </label>
+          <label>
+            Timestamps
+            <select id="elevenlabsTimestamps">
+              <option value="word">word</option>
+              <option value="character">character</option>
+            </select>
+          </label>
+          <label>
+            Speakers
+            <input id="elevenlabsSpeakers" type="number" min="1" max="32" placeholder="Auto" />
+          </label>
+          <label>
+            Temp
+            <input id="elevenlabsTemperature" type="number" min="0" max="2" step="0.1" value="0" />
+          </label>
+          <label>
+            Seed
+            <input id="elevenlabsSeed" type="number" min="0" max="2147483647" placeholder="Auto" />
+          </label>
+          <label class="check-label">
+            <input id="elevenlabsDiarize" type="checkbox" />
+            Diarize
+          </label>
+          <label class="check-label">
+            <input id="elevenlabsAudioEvents" type="checkbox" />
+            Audio events
+          </label>
+          <label class="check-label">
+            <input id="elevenlabsNoVerbatim" type="checkbox" checked />
+            Clean filler
+          </label>
+          <label class="wide-control">
+            Keyterms
+            <input id="elevenlabsKeyterms" type="text" placeholder="names, places, technical terms" />
+          </label>
+        </div>
         <button id="startButton" type="button" class="primary" disabled>Transcribir</button>
       </section>
 

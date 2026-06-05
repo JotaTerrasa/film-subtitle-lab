@@ -32,6 +32,8 @@ app = FastAPI(title="Film Subtitle Lab")
 app.mount("/static", StaticFiles(directory=APP_DIR / "static"), name="static")
 
 ELEVENLABS_STT_URL = "https://api.elevenlabs.io/v1/speech-to-text"
+ELEVENLABS_MODELS = {"scribe_v2", "scribe_v1"}
+ELEVENLABS_TIMESTAMP_GRANULARITIES = {"word", "character"}
 
 executor = ThreadPoolExecutor(max_workers=1)
 jobs_lock = threading.Lock()
@@ -458,8 +460,13 @@ def extract_word_timestamps(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
         }
         if item.get("score") is not None:
             word["score"] = round(float(item["score"]), 4)
-        if item.get("speaker") is not None:
-            word["speaker"] = item["speaker"]
+        if item.get("logprob") is not None:
+            word["logprob"] = round(float(item["logprob"]), 4)
+        speaker = item.get("speaker") if item.get("speaker") is not None else item.get("speaker_id")
+        if speaker is not None:
+            word["speaker"] = speaker
+        if item.get("channel_index") is not None:
+            word["channel_index"] = item["channel_index"]
         if item.get("segment_index") is not None:
             word["segment_index"] = item["segment_index"]
         words.append(word)
@@ -506,6 +513,18 @@ def format_elevenlabs_error(response: requests.Response) -> str:
     return f"{base}: {' - '.join(parts)}" if parts else base
 
 
+def parse_keyterms(value: str) -> List[str]:
+    terms = []
+    for raw in re.split(r"[\n,]+", value or ""):
+        term = re.sub(r"\s+", " ", raw).strip()
+        if not term:
+            continue
+        if any(char in term for char in "<>{}[]\\"):
+            continue
+        terms.append(term[:49])
+    return terms[:1000]
+
+
 def write_elevenlabs_outputs(job: Dict[str, Any], payload: Dict[str, Any]) -> Dict[str, str]:
     output_dir = Path(job["output_dir"])
     stem = Path(job["video_path"]).stem
@@ -527,6 +546,16 @@ def write_elevenlabs_outputs(job: Dict[str, Any], payload: Dict[str, Any]) -> Di
         "model_id": job.get("elevenlabs_model"),
         "language": payload.get("language_code"),
         "language_probability": payload.get("language_probability"),
+        "settings": {
+            "timestamps_granularity": job.get("elevenlabs_timestamps"),
+            "diarize": job.get("elevenlabs_diarize"),
+            "tag_audio_events": job.get("elevenlabs_tag_audio_events"),
+            "no_verbatim": job.get("elevenlabs_no_verbatim"),
+            "num_speakers": job.get("elevenlabs_num_speakers"),
+            "temperature": job.get("elevenlabs_temperature"),
+            "seed": job.get("elevenlabs_seed"),
+            "keyterms": job.get("elevenlabs_keyterms") or [],
+        },
         "text": payload.get("text"),
         "words": payload.get("words") or [],
         "segments": cues,
@@ -639,28 +668,57 @@ def run_elevenlabs_transcription(job_id: str) -> None:
         append_log(job_id, "ERROR: ELEVENLABS_API_KEY is not set.")
         return
 
-    model_id = os.getenv("ELEVENLABS_STT_MODEL", "scribe_v2").strip() or "scribe_v2"
+    model_id = str(job.get("elevenlabs_model") or os.getenv("ELEVENLABS_STT_MODEL", "scribe_v2")).strip() or "scribe_v2"
+    if model_id not in ELEVENLABS_MODELS:
+        model_id = "scribe_v2"
     job["elevenlabs_model"] = model_id
-    data: Dict[str, Any] = {
-        "model_id": model_id,
-        "timestamps_granularity": "word",
-        "diarize": "false",
-        "tag_audio_events": "false",
-    }
+    timestamps = str(job.get("elevenlabs_timestamps") or "word").strip()
+    if timestamps not in ELEVENLABS_TIMESTAMP_GRANULARITIES:
+        timestamps = "word"
+    no_verbatim = bool(job.get("elevenlabs_no_verbatim")) and model_id == "scribe_v2"
+
+    data: List[tuple[str, str]] = [
+        ("model_id", model_id),
+        ("timestamps_granularity", timestamps),
+        ("diarize", "true" if job.get("elevenlabs_diarize") else "false"),
+        ("tag_audio_events", "true" if job.get("elevenlabs_tag_audio_events") else "false"),
+        ("no_verbatim", "true" if no_verbatim else "false"),
+    ]
     if job["language"] != "auto":
-        data["language_code"] = job["language"]
+        data.append(("language_code", job["language"]))
+    if job.get("elevenlabs_num_speakers"):
+        data.append(("num_speakers", str(job["elevenlabs_num_speakers"])))
+    if job.get("elevenlabs_temperature") is not None:
+        data.append(("temperature", str(job["elevenlabs_temperature"])))
+    if job.get("elevenlabs_seed") is not None:
+        data.append(("seed", str(job["elevenlabs_seed"])))
+    for term in job.get("elevenlabs_keyterms") or []:
+        data.append(("keyterms", term))
 
     command_meta = {
         "provider": "elevenlabs",
         "endpoint": ELEVENLABS_STT_URL,
         "model_id": model_id,
+        "timestamps_granularity": timestamps,
+        "diarize": job.get("elevenlabs_diarize", False),
+        "tag_audio_events": job.get("elevenlabs_tag_audio_events", False),
+        "no_verbatim": no_verbatim,
+        "num_speakers": job.get("elevenlabs_num_speakers"),
+        "temperature": job.get("elevenlabs_temperature"),
+        "seed": job.get("elevenlabs_seed"),
+        "keyterms_count": len(job.get("elevenlabs_keyterms") or []),
         "language": job["language"],
         "file": Path(job["video_path"]).name,
     }
     set_job(job_id, status="running", started_at=now_iso(), command=command_meta)
     append_log(
         job_id,
-        f"+ ElevenLabs STT model={model_id} language={job['language']} file={Path(job['video_path']).name}",
+        (
+            f"+ ElevenLabs STT model={model_id} language={job['language']} "
+            f"timestamps={timestamps} diarize={job.get('elevenlabs_diarize', False)} "
+            f"events={job.get('elevenlabs_tag_audio_events', False)} "
+            f"file={Path(job['video_path']).name}"
+        ),
     )
 
     start = time.time()
@@ -728,11 +786,30 @@ async def create_job(
     model: str = Form("large-v3"),
     batch_size: int = Form(8),
     compute_type: str = Form("float16"),
+    elevenlabs_model: str = Form("scribe_v2"),
+    elevenlabs_timestamps: str = Form("word"),
+    elevenlabs_num_speakers: Optional[int] = Form(None),
+    elevenlabs_temperature: Optional[float] = Form(None),
+    elevenlabs_seed: Optional[int] = Form(None),
+    elevenlabs_diarize: bool = Form(False),
+    elevenlabs_tag_audio_events: bool = Form(False),
+    elevenlabs_no_verbatim: bool = Form(True),
+    elevenlabs_keyterms: str = Form(""),
 ) -> Dict[str, Any]:
     if not video.filename:
         raise HTTPException(status_code=400, detail="Video file is required.")
     if stt_provider not in {"whisperx", "elevenlabs"}:
         raise HTTPException(status_code=400, detail="Unsupported STT provider.")
+    if elevenlabs_model not in ELEVENLABS_MODELS:
+        raise HTTPException(status_code=400, detail="Unsupported ElevenLabs model.")
+    if elevenlabs_timestamps not in ELEVENLABS_TIMESTAMP_GRANULARITIES:
+        raise HTTPException(status_code=400, detail="Unsupported ElevenLabs timestamp granularity.")
+    if elevenlabs_num_speakers is not None and not 1 <= elevenlabs_num_speakers <= 32:
+        raise HTTPException(status_code=400, detail="ElevenLabs speakers must be between 1 and 32.")
+    if elevenlabs_temperature is not None and not 0 <= elevenlabs_temperature <= 2:
+        raise HTTPException(status_code=400, detail="ElevenLabs temperature must be between 0 and 2.")
+    if elevenlabs_seed is not None and not 0 <= elevenlabs_seed <= 2147483647:
+        raise HTTPException(status_code=400, detail="ElevenLabs seed is out of range.")
 
     job_id = uuid.uuid4().hex[:12]
     root = job_dir(job_id)
@@ -766,6 +843,15 @@ async def create_job(
         "model": model,
         "batch_size": batch_size,
         "compute_type": compute_type,
+        "elevenlabs_model": elevenlabs_model,
+        "elevenlabs_timestamps": elevenlabs_timestamps,
+        "elevenlabs_num_speakers": elevenlabs_num_speakers,
+        "elevenlabs_temperature": elevenlabs_temperature,
+        "elevenlabs_seed": elevenlabs_seed,
+        "elevenlabs_diarize": elevenlabs_diarize,
+        "elevenlabs_tag_audio_events": elevenlabs_tag_audio_events,
+        "elevenlabs_no_verbatim": elevenlabs_no_verbatim,
+        "elevenlabs_keyterms": parse_keyterms(elevenlabs_keyterms),
         "generated": {},
         "error": "",
     }

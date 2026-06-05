@@ -33,12 +33,19 @@ const wordGrid = document.getElementById("wordGrid");
 const wordCount = document.getElementById("wordCount");
 const downloadRow = document.getElementById("downloadRow");
 const sttProvider = document.getElementById("sttProvider");
+const localControls = document.getElementById("localControls");
+const elevenlabsControls = document.getElementById("elevenlabsControls");
 const showGenerated = document.getElementById("showGenerated");
 const showReference = document.getElementById("showReference");
 const offsetMs = document.getElementById("offsetMs");
 const offsetMinus = document.getElementById("offsetMinus");
 const offsetPlus = document.getElementById("offsetPlus");
 const offsetReset = document.getElementById("offsetReset");
+
+function appendIfValue(form, name, value) {
+  const trimmed = String(value || "").trim();
+  if (trimmed) form.append(name, trimmed);
+}
 
 function isSubtitle(file) {
   return /\.(srt|vtt)$/i.test(file.name);
@@ -111,9 +118,25 @@ startButton.addEventListener("click", async () => {
   if (state.referenceFile) form.append("reference", state.referenceFile);
   form.append("stt_provider", sttProvider.value);
   form.append("language", document.getElementById("language").value);
-  form.append("model", document.getElementById("model").value);
-  form.append("batch_size", document.getElementById("batchSize").value);
-  form.append("compute_type", document.getElementById("computeType").value);
+
+  if (sttProvider.value === "elevenlabs") {
+    form.append("elevenlabs_model", document.getElementById("elevenlabsModel").value);
+    form.append("elevenlabs_timestamps", document.getElementById("elevenlabsTimestamps").value);
+    appendIfValue(form, "elevenlabs_num_speakers", document.getElementById("elevenlabsSpeakers").value);
+    appendIfValue(form, "elevenlabs_temperature", document.getElementById("elevenlabsTemperature").value);
+    appendIfValue(form, "elevenlabs_seed", document.getElementById("elevenlabsSeed").value);
+    form.append("elevenlabs_diarize", document.getElementById("elevenlabsDiarize").checked ? "true" : "false");
+    form.append(
+      "elevenlabs_tag_audio_events",
+      document.getElementById("elevenlabsAudioEvents").checked ? "true" : "false",
+    );
+    form.append("elevenlabs_no_verbatim", document.getElementById("elevenlabsNoVerbatim").checked ? "true" : "false");
+    appendIfValue(form, "elevenlabs_keyterms", document.getElementById("elevenlabsKeyterms").value);
+  } else {
+    form.append("model", document.getElementById("model").value);
+    form.append("batch_size", document.getElementById("batchSize").value);
+    form.append("compute_type", document.getElementById("computeType").value);
+  }
 
   startButton.disabled = true;
   statusBand.hidden = false;
@@ -304,8 +327,8 @@ function formatTimeRange(start, end) {
   return `${formatTime(start)} - ${formatTime(end)}`;
 }
 
-function formatScore(score) {
-  const value = Number(score);
+function formatScore(word) {
+  const value = Number(word.score ?? word.logprob);
   return Number.isFinite(value) ? value.toFixed(2) : "-";
 }
 
@@ -333,7 +356,7 @@ function renderWordGrid() {
     item.innerHTML = `
       <div class="time">${formatTimeRange(word.start, word.end)}</div>
       <div>${escapeHtml(word.text)}</div>
-      <div>${formatScore(word.score)}</div>
+      <div>${formatScore(word)}</div>
     `;
     item.addEventListener("click", () => {
       videoPlayer.currentTime = Math.max(0, Number(word.start) || 0);
@@ -443,12 +466,20 @@ offsetReset.addEventListener("click", () => {
 
 function updateProviderControls() {
   const hosted = sttProvider.value === "elevenlabs";
-  document.getElementById("model").disabled = hosted;
-  document.getElementById("batchSize").disabled = hosted;
-  document.getElementById("computeType").disabled = hosted;
+  localControls.hidden = hosted;
+  elevenlabsControls.hidden = !hosted;
+  updateElevenlabsModelControls();
+}
+
+function updateElevenlabsModelControls() {
+  const model = document.getElementById("elevenlabsModel").value;
+  const noVerbatim = document.getElementById("elevenlabsNoVerbatim");
+  noVerbatim.disabled = model !== "scribe_v2";
+  if (model !== "scribe_v2") noVerbatim.checked = false;
 }
 
 sttProvider.addEventListener("change", updateProviderControls);
+document.getElementById("elevenlabsModel").addEventListener("change", updateElevenlabsModelControls);
 
 updateProviderControls();
 renderSelection();
