@@ -64,6 +64,7 @@ const offsetPlus = document.getElementById("offsetPlus");
 const offsetReset = document.getElementById("offsetReset");
 const uiLanguage = document.getElementById("uiLanguage");
 const pitchButton = document.getElementById("pitchButton");
+const pitchToggleButton = document.getElementById("pitchToggleButton");
 const pitchStatus = document.getElementById("pitchStatus");
 const pitchAudio = document.getElementById("pitchAudio");
 const providerExplain = document.getElementById("providerExplain");
@@ -100,8 +101,11 @@ const I18N = {
     hackathonPitch: "Explicar proyecto",
     pitchGenerating: "Generando voz...",
     pitchPlaying: "Reproduciendo pitch",
+    pitchPaused: "Pitch pausado",
     pitchReady: "Pitch listo",
     pitchError: "No se pudo generar el pitch",
+    pausePitch: "Pausar",
+    resumePitch: "Seguir",
     transcribe: "Transcribir",
     technicalLog: "Log tecnico",
     comparisonTitle: "Comparacion sincronizada",
@@ -234,8 +238,11 @@ const I18N = {
     hackathonPitch: "Explain project",
     pitchGenerating: "Generating voice...",
     pitchPlaying: "Playing pitch",
+    pitchPaused: "Pitch paused",
     pitchReady: "Pitch ready",
     pitchError: "Could not generate pitch",
+    pausePitch: "Pause",
+    resumePitch: "Resume",
     transcribe: "Transcribe",
     technicalLog: "Technical log",
     comparisonTitle: "Synchronized comparison",
@@ -1167,8 +1174,39 @@ function updateElevenlabsModelControls() {
   if (model !== "scribe_v2") noVerbatim.checked = false;
 }
 
+function updatePitchToggleButton() {
+  if (!pitchToggleButton) return;
+  const hasAudio = Boolean(pitchAudio.currentSrc || pitchAudio.src);
+  const canControl = hasAudio && !pitchAudio.ended;
+  pitchToggleButton.hidden = !canControl;
+  pitchToggleButton.disabled = !canControl;
+  pitchToggleButton.textContent = pitchAudio.paused ? t("resumePitch") : t("pausePitch");
+  pitchToggleButton.setAttribute("aria-label", pitchToggleButton.textContent);
+}
+
+async function togglePitchPlayback() {
+  if (!pitchAudio.src || pitchAudio.ended) return;
+  if (pitchAudio.paused) {
+    try {
+      pitchStatus.textContent = t("pitchPlaying");
+      await pitchAudio.play();
+    } catch (error) {
+      pitchStatus.textContent = `${t("pitchError")}: ${error.message || error}`;
+      pitchButton.disabled = false;
+    }
+  } else {
+    pitchAudio.pause();
+    pitchStatus.textContent = t("pitchPaused");
+  }
+  updatePitchToggleButton();
+}
+
 async function playHackathonPitch() {
   pitchButton.disabled = true;
+  if (pitchToggleButton) {
+    pitchToggleButton.hidden = true;
+    pitchToggleButton.disabled = true;
+  }
   pitchStatus.textContent = t("pitchGenerating");
   try {
     const response = await fetch(`/api/hackathon-pitch/audio?language=${encodeURIComponent(getUiLanguage())}`, {
@@ -1193,9 +1231,11 @@ async function playHackathonPitch() {
     pitchAudio.src = audioUrl;
     pitchStatus.textContent = t("pitchPlaying");
     await pitchAudio.play();
+    updatePitchToggleButton();
   } catch (error) {
     pitchStatus.textContent = `${t("pitchError")}: ${error.message || error}`;
     pitchButton.disabled = false;
+    updatePitchToggleButton();
   }
 }
 
@@ -1217,6 +1257,7 @@ function applyTranslations() {
 
   renderSelection();
   renderCompareExplainer();
+  updatePitchToggleButton();
   if (state.currentStage) {
     statusText.textContent = localizeStage(state.currentStage).title;
     renderStage(state.currentStage);
@@ -1235,13 +1276,25 @@ function applyTranslations() {
 sttProvider.addEventListener("change", updateProviderControls);
 document.getElementById("elevenlabsModel").addEventListener("change", updateElevenlabsModelControls);
 pitchButton.addEventListener("click", playHackathonPitch);
+pitchToggleButton.addEventListener("click", togglePitchPlayback);
+pitchAudio.addEventListener("play", () => {
+  pitchStatus.textContent = t("pitchPlaying");
+  updatePitchToggleButton();
+});
+pitchAudio.addEventListener("pause", () => {
+  if (pitchAudio.ended || !pitchAudio.src) return;
+  pitchStatus.textContent = t("pitchPaused");
+  updatePitchToggleButton();
+});
 pitchAudio.addEventListener("ended", () => {
   pitchButton.disabled = false;
   pitchStatus.textContent = t("pitchReady");
+  updatePitchToggleButton();
 });
 pitchAudio.addEventListener("error", () => {
   pitchButton.disabled = false;
   pitchStatus.textContent = t("pitchError");
+  updatePitchToggleButton();
 });
 uiLanguage.value = I18N[state.uiLanguage] ? state.uiLanguage : "es";
 uiLanguage.addEventListener("change", () => {

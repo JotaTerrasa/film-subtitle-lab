@@ -67,6 +67,10 @@ select {
   min-width: 148px;
 }
 
+.pitch-toggle-button {
+  min-width: 86px;
+}
+
 .pitch-status {
   color: var(--muted);
   font-size: 12px;
