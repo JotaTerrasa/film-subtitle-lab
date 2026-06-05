@@ -169,8 +169,8 @@
                 <span id="matchSummary" data-i18n="matchWaiting">Esperando resultados</span>
               </div>
               <div class="timeline-legend">
-                <span><i class="legend-new"></i><span data-i18n="newSubtitles">Nuevo</span></span>
-                <span><i class="legend-original"></i><span data-i18n="originalSubtitles">Original</span></span>
+                <span><i class="legend-new"></i><span data-i18n="newSubtitles">Nuevo reparado</span></span>
+                <span><i class="legend-original"></i><span data-i18n="originalSubtitles">Original roto</span></span>
                 <span><i class="legend-match"></i><span data-i18n="matchedSubtitles">Match</span></span>
               </div>
             </div>
@@ -186,11 +186,11 @@
 
         <aside class="compare-panel">
           <div class="compare-header">
-            <h2 data-i18n="comparisonTitle">Comparacion sincronizada</h2>
+            <h2 data-i18n="comparisonTitle">Comparacion de reparacion</h2>
             <div class="compare-tools">
               <div class="toggles">
-                <label><input id="showGenerated" type="checkbox" checked /> <span data-i18n="newSubtitles">Nuevo</span></label>
-                <label><input id="showReference" type="checkbox" checked /> <span data-i18n="originalSubtitles">Original</span></label>
+                <label><input id="showGenerated" type="checkbox" checked /> <span data-i18n="newSubtitles">Nuevo reparado</span></label>
+                <label><input id="showReference" type="checkbox" checked /> <span data-i18n="originalSubtitles">Original roto</span></label>
               </div>
               <div class="offset-tools">
                 <button id="offsetMinus" type="button" title="Adelantar original 100 ms" data-i18n-title="offsetMinusTitle">-100ms</button>
@@ -205,29 +205,29 @@
           </div>
           <div class="compare-explainer" aria-label="Subtitle comparison guide">
             <div>
-              <strong data-i18n="compareGeneratedLabel">Nuevo STT</strong>
-              <span id="providerExplain">Generado por WhisperX local o ElevenLabs.</span>
+              <strong data-i18n="compareGeneratedLabel">Nuevo reparado</strong>
+              <span id="providerExplain">Creado mezclando la transcripcion con el original roto.</span>
             </div>
             <div>
-              <strong data-i18n="compareOriginalLabel">Original sincronizado</strong>
-              <span data-i18n="compareOriginalHint">Texto del SRT/VTT subido, retimado con timestamps por palabra si es posible.</span>
+              <strong data-i18n="compareOriginalLabel">Original roto</strong>
+              <span data-i18n="compareOriginalHint">SRT/VTT subido con tiempos incorrectos o drift temporal.</span>
             </div>
             <div>
               <strong data-i18n="compareMatchLabel">Badge match</strong>
-              <span data-i18n="compareMatchHint">MATCH OK encaja; +/- ms marca desfase; solo STT/original indica que no hay pareja.</span>
+              <span data-i18n="compareMatchHint">MATCH OK significa poco cambio; +/- ms muestra cuanto se ha movido el cue roto.</span>
             </div>
           </div>
           <div class="cue-grid-head">
             <span>
-              <strong data-i18n="timeMatchColumn">Tiempo + match</strong>
-              <small data-i18n="timeMatchColumnHint">Estado del emparejado</small>
+              <strong data-i18n="timeMatchColumn">Tiempo + cambio</strong>
+              <small data-i18n="timeMatchColumnHint">Nuevo vs roto</small>
             </span>
             <span>
-              <strong data-i18n="newSttColumn">STT nuevo</strong>
-              <small data-i18n="newSttColumnHint">WhisperX local / ElevenLabs</small>
+              <strong data-i18n="newSttColumn">Nuevo reparado</strong>
+              <small data-i18n="newSttColumnHint">Transcript + SRT/VTT roto</small>
             </span>
             <span>
-              <strong data-i18n="syncedOriginalColumn">Original sync</strong>
+              <strong data-i18n="syncedOriginalColumn">Original roto</strong>
               <small data-i18n="syncedOriginalColumnHint">SRT/VTT subido</small>
             </span>
           </div>

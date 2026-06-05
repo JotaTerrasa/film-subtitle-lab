@@ -614,7 +614,7 @@ video {
 
 .cue-grid-head,
 .cue-row {
-  grid-template-columns: 116px minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: 140px minmax(0, 1fr) minmax(0, 1fr);
 }
 
 .word-grid-head,
@@ -753,6 +753,22 @@ video {
   font-variant-numeric: tabular-nums;
 }
 
+.time-main,
+.time-aux {
+  display: block;
+  line-height: 1.2;
+}
+
+.time-main {
+  color: #c9d2d7;
+}
+
+.time-aux {
+  color: #7f8d94;
+  font-size: 11px;
+  margin-top: 3px;
+}
+
 .word-row.empty {
   color: var(--muted);
   cursor: default;
@@ -815,7 +831,7 @@ video {
 
   .cue-grid-head,
   .cue-row {
-    grid-template-columns: 102px minmax(0, 1fr);
+    grid-template-columns: 118px minmax(0, 1fr);
   }
 
   .word-grid-head,
