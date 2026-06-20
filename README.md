@@ -1,27 +1,30 @@
 # Film Subtitle Lab
 
-GPU-accelerated web app for generating subtitles with WhisperX and comparing them against an existing subtitle file.
+GPU-accelerated web app for repairing broken subtitle timing with WhisperX or ElevenLabs word timestamps.
+
+Film Subtitle Lab takes a media file plus an optional broken `.srt`/`.vtt`, transcribes the audio, uses the word-level timeline as a timing source, and produces a new repaired subtitle file that preserves the original subtitle text whenever possible. The UI makes the repair visible with a waveform, timing lanes, cue-by-cue shift badges, and word-level timestamps.
 
 The app is designed for a Windows workstation with an NVIDIA RTX GPU, Docker Desktop, and CUDA-enabled containers. It provides a local browser UI, a FastAPI backend, persistent model/job storage, and an optional Cloudflare Quick Tunnel so the UI can be used remotely from another machine.
 
 ## Features
 
 - Drag-and-drop media upload for video or audio files.
-- Optional reference subtitle upload in `.srt` or `.vtt` format.
+- Optional broken subtitle upload in `.srt` or `.vtt` format.
 - Selectable STT provider: local WhisperX on the workstation GPU or ElevenLabs hosted STT.
 - WhisperX transcription inside a CUDA 12.8 Docker image.
 - ElevenLabs Scribe transcription through the Speech to Text API.
 - One-click hackathon presenter voiceover using ElevenLabs Text to Speech.
 - Configurable language, Whisper model, batch size, and compute type.
-- Generated downloads in SRT, VTT, JSON, TXT, and TSV formats.
-- Side-by-side generated/reference subtitle review.
+- Raw STT downloads in SRT, VTT, JSON, TXT, and TSV formats.
+- Repaired subtitle downloads in `NEW SRT`, `NEW VTT`, and `NEW TSV` formats when a broken subtitle is uploaded.
+- Side-by-side review of the new repaired subtitle against the broken original.
 - Word-level timestamp table for both WhisperX and ElevenLabs jobs.
 - Embedded media player with synchronized subtitle overlay.
 - Human-readable live progress stages during upload, transcription, alignment, and export.
-- Automatic reference subtitle alignment using offset and timing scale estimation.
-- Word-level reference subtitle re-sync: when an original subtitle file is uploaded, the app can preserve its text and replace its timings from the STT word timeline.
-- Extra `SYNC_SRT`, `SYNC_VTT`, and `SYNC_TSV` downloads for the re-synced original subtitle file.
-- Manual reference offset controls for fine tuning without retranscribing.
+- Automatic broken-subtitle alignment using offset and timing scale estimation.
+- Word-level subtitle repair: when an original subtitle file is uploaded, the app can preserve its text and replace its timings from the STT word timeline.
+- Visual waveform timeline showing new repaired cues, broken original cues, and cue-to-cue shifts.
+- Manual broken-original offset controls for review and diagnosis without retranscribing.
 - Persistent job/model folders mounted from the host.
 - Optional Cloudflare tunnel for remote access.
 
@@ -55,7 +58,7 @@ You should see your NVIDIA GPU listed in the output.
 |       |-- app.js              # Upload, polling, review, offset controls
 |       `-- styles.css          # UI styling
 |-- data/
-|   |-- jobs/                   # Uploaded files, generated subtitles, job metadata
+|   |-- jobs/                   # Uploads, repaired subtitles, raw STT output, job metadata
 |   `-- models/                 # Hugging Face, Torch, and WhisperX model caches
 |-- Dockerfile                  # CUDA 12.8 + PyTorch + WhisperX image
 |-- docker-compose.yml          # Compose definition for local GPU runtime
@@ -63,7 +66,7 @@ You should see your NVIDIA GPU listed in the output.
 `-- run-with-tunnel.ps1         # Local runner plus Cloudflare Quick Tunnel
 ```
 
-`data/` is intentionally ignored by Git. It may contain uploads, generated subtitles, downloaded model weights, logs, and local runtime files.
+`data/` is intentionally ignored by Git. It may contain uploads, repaired subtitles, raw STT output, downloaded model weights, logs, and local runtime files.
 
 ## Quick Start On Windows
 
@@ -150,15 +153,15 @@ By default, the tunnel script does not enable Basic Auth. Treat the printed URL 
 1. Open the local or tunneled URL in a browser.
 2. Use `Explain project` if you want the app to narrate a short hackathon pitch with ElevenLabs TTS.
 3. Drop a video/audio file into the upload area.
-4. Optionally drop an existing `.srt` or `.vtt` file to compare against.
+4. Optionally drop an existing broken `.srt` or `.vtt` file to repair.
 5. Select the STT provider.
 6. Select language, model, batch size, and compute type. Model, batch, and compute apply to local WhisperX.
 7. Click the transcription button.
 8. Wait for upload and transcription to finish.
-9. Review generated and reference subtitles in the synchronized comparison view.
+9. Review the new repaired subtitle beside the broken original in the repair comparison view.
 10. Inspect word-level timestamps and click a word row to jump the player to that point.
-11. If you uploaded an existing subtitle file, download the `SYNC_*` files to keep the original text with corrected timings.
-12. Download the generated subtitle files.
+11. If you uploaded an existing subtitle file, download the `NEW_*` files to keep the original text with corrected timings.
+12. Download the raw STT files if you also want the unmerged transcript output.
 
 ## STT Providers
 
@@ -253,12 +256,15 @@ C:\stt-subtitles-web\data\jobs\<job_id>\
 Typical files:
 
 ```text
-uploads/                 # Original media and optional reference subtitle
-output/*.srt             # Generated SRT
-output/*.vtt             # Generated VTT
+uploads/                 # Original media and optional broken subtitle
+output/*.srt             # Raw STT SRT
+output/*.vtt             # Raw STT VTT
 output/*.json            # Provider JSON with timing metadata
 output/*.txt             # Plain text transcript
-output/*.tsv             # Segment table
+output/*.tsv             # Raw STT segment table
+output/*.reference-resynced.srt  # New repaired subtitle preserving uploaded text
+output/*.reference-resynced.vtt  # New repaired VTT
+output/*.reference-resynced.tsv  # New repaired timing table
 job.json                 # Job metadata
 job.log                  # Provider command/API output
 ```
@@ -278,11 +284,12 @@ The web UI uses these backend endpoints:
 | Method | Path | Purpose |
 | --- | --- | --- |
 | `GET` | `/` | Serve the web UI |
-| `POST` | `/api/jobs` | Upload media/reference files and enqueue transcription |
+| `POST` | `/api/jobs` | Upload media/broken subtitle files and enqueue transcription |
 | `GET` | `/api/jobs/{job_id}/status` | Poll job status and log tail |
 | `GET` | `/api/jobs/{job_id}/result` | Fetch cues, alignment, downloads, and review metadata |
 | `GET` | `/api/jobs/{job_id}/video` | Stream the uploaded media file |
-| `GET` | `/api/jobs/{job_id}/download/{kind}` | Download `srt`, `vtt`, `json`, `txt`, or `tsv` output |
+| `GET` | `/api/jobs/{job_id}/download/{kind}` | Download raw STT `srt`, `vtt`, `json`, `txt`, or `tsv` output |
+| `GET` | `/api/jobs/{job_id}/download-reference/{kind}` | Download repaired subtitle `srt`, `vtt`, or `tsv` output |
 
 When `APP_PASSWORD` is set, all endpoints are protected with HTTP Basic Auth.
 
@@ -305,6 +312,10 @@ docker run --rm --gpus all --shm-size 8g `
   -e "HF_HOME=/models/huggingface" `
   -e "TORCH_HOME=/models/torch" `
   -e "XDG_CACHE_HOME=/models" `
+  -e ELEVENLABS_API_KEY `
+  -e ELEVENLABS_STT_MODEL `
+  -e ELEVENLABS_TTS_MODEL `
+  -e ELEVENLABS_TTS_VOICE_ID `
   film-subtitle-lab:cuda128
 ```
 
@@ -419,10 +430,20 @@ If it prints nothing, set the key and restart the runner.
 
 - Cloudflare Quick Tunnels are convenient for personal/temporary access, not production hosting.
 - Keep the tunnel process open only while you need the app.
-- Do not commit `data/`, model caches, uploads, job logs, or generated subtitles.
+- Do not commit `data/`, model caches, uploads, job logs, repaired subtitles, or raw STT outputs.
 - Do not commit `ELEVENLABS_API_KEY`, `.env`, or any other local secret.
 - Anyone with the public tunnel URL can access the app while the tunnel is running.
 - The ElevenLabs provider sends uploaded media to ElevenLabs for transcription.
+
+## Hackathon Credits
+
+Film Subtitle Lab was built during the Forja hackathon organized by Marcos Valera with Sergio Sillero.
+
+Core hackathon team:
+
+- Jaime Terrasa
+- [Nikola Rahman](https://www.linkedin.com/in/ACoAAA5hW94BYWZv8nlBGCuQ85Hm9L_lqLjmScY)
+- [Juan Alberto Raya](https://www.linkedin.com/in/juan-alberto-raya/)
 
 ## Development Notes
 
@@ -434,14 +455,15 @@ ThreadPoolExecutor(max_workers=1)
 
 This avoids saturating the GPU with concurrent WhisperX jobs. Increase with care only after testing GPU memory behavior.
 
-The subtitle comparison flow is:
+The subtitle repair flow is:
 
-1. Parse generated and reference subtitle cues.
-2. Normalize cue text.
-3. Match likely corresponding cues.
-4. Estimate reference offset.
-5. Estimate timing scale when enough matches exist.
-6. Apply offset and scale in the browser for review.
+1. Parse raw STT cues and the uploaded broken subtitle cues.
+2. Extract word-level timestamps from WhisperX or ElevenLabs.
+3. Match the broken subtitle text against the word timeline.
+4. Preserve the uploaded subtitle text where possible.
+5. Replace broken cue timings with repaired word-derived timings.
+6. Return both the new repaired cues and the broken original cues for visual review.
+7. Export raw STT files plus repaired `NEW_*` subtitle files.
 
 ## Cleanup
 

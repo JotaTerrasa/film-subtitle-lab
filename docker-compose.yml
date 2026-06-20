@@ -15,6 +15,8 @@ services:
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
       ELEVENLABS_API_KEY: ${ELEVENLABS_API_KEY:-}
       ELEVENLABS_STT_MODEL: ${ELEVENLABS_STT_MODEL:-scribe_v2}
+      ELEVENLABS_TTS_MODEL: ${ELEVENLABS_TTS_MODEL:-eleven_multilingual_v2}
+      ELEVENLABS_TTS_VOICE_ID: ${ELEVENLABS_TTS_VOICE_ID:-21m00Tcm4TlvDq8ikWAM}
     volumes:
       - ./data/jobs:/data/jobs
       - ./data/models:/models

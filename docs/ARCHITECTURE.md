@@ -58,21 +58,22 @@ host data/jobs   -> container /data/jobs
 host data/models -> container /models
 ```
 
-`/data/jobs` contains uploads, job metadata, logs, and generated subtitles.
+`/data/jobs` contains uploads, job metadata, logs, raw STT outputs, and repaired subtitle files.
 
 `/models` contains Hugging Face, Torch, and WhisperX caches. Keeping this on the host avoids repeated downloads.
 
 ## Transcription Flow
 
-1. The browser uploads media and an optional reference subtitle file.
+1. The browser uploads media and an optional broken subtitle file.
 2. FastAPI creates a job folder and writes `job.json`.
 3. A background worker runs either the `whisperx` CLI or the ElevenLabs API request.
 4. Transcription progress and provider output are appended to `job.log`.
 5. A high-level stage is updated for the browser, such as voice detection, transcription, alignment, hosted API processing, or subtitle export.
 6. When transcription succeeds, output paths are stored in job metadata.
 7. The browser fetches `/api/jobs/{job_id}/result`.
-8. Generated and reference cues are parsed and returned with alignment metadata.
+8. Raw STT cues, repaired cues, and broken original cues are parsed and returned with alignment metadata.
 9. Provider-specific word timestamp shapes are normalized into `word_timestamps` for the browser UI.
+10. When word-level repair is available, the UI compares the new repaired subtitle against the broken original cue by cue.
 
 ## Provider Behavior
 
@@ -94,18 +95,19 @@ ElevenLabs:
 - Converts the returned word timestamps into local SRT, VTT, JSON, TXT, and TSV outputs.
 - Exposes returned word timings through the same frontend table as WhisperX.
 
-## Alignment Flow
+## Repair Flow
 
-The alignment estimator compares generated cues against reference cues:
+The repair pipeline uses the STT output as a timing source and the uploaded subtitle as the text source:
 
-1. Parse SRT/VTT cues into start, end, and text.
-2. Strip subtitle markup.
-3. Normalize text for approximate matching.
-4. Score cue pairs with word overlap and `SequenceMatcher`.
-5. Estimate median offset from matched cue timestamps.
-6. Estimate timing scale when enough matches are available.
+1. Parse raw STT cues and uploaded broken subtitle cues.
+2. Extract word-level timestamps from WhisperX or ElevenLabs.
+3. Tokenize the broken subtitle text and align it to the STT word timeline.
+4. Preserve the uploaded subtitle text whenever a cue can be aligned.
+5. Replace broken cue timings with word-derived timings.
+6. Export repaired `reference-resynced` SRT, VTT, and TSV files.
+7. Return both the repaired cues and broken original cues for visual review.
 
-The browser applies the returned offset and scale to the reference subtitles. The operator can then adjust the reference offset manually without starting a new transcription job.
+If word-level repair is not available, the app falls back to global offset and scale estimation so the user can still compare raw STT output against the uploaded subtitle.
 
 ## Authentication
 
