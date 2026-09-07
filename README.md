@@ -16,6 +16,30 @@ GPU-accelerated web app for repairing broken subtitle timing with WhisperX or El
 > **Deployment note:** no public hosted demo or media artifacts are included;
 > the app is intended to run locally on a GPU workstation.
 
+## System at a glance
+
+```mermaid
+flowchart LR
+    A[Browser UI<br/>Spanish / English] --> B[FastAPI<br/>single-worker job execution]
+    B --> C{STT provider}
+    C -->|Local GPU| D[WhisperX<br/>CUDA Docker]
+    C -->|Hosted API| E[ElevenLabs<br/>Speech to Text]
+    D --> F[Word timestamps<br/>subtitle re-sync]
+    E --> F
+    F --> G[Review UI<br/>waveform, cue shifts, exports]
+    F --> H[Persisted job artifacts<br/>and model cache]
+```
+
+## Evidence in this repository
+
+| Capability | Where it is implemented |
+| --- | --- |
+| Two transcription paths | [Provider selection and job orchestration](app/main.py) · [architecture notes](docs/ARCHITECTURE.md#provider-behavior) |
+| Word-level subtitle re-sync | [Repair pipeline](app/main.py#L576-L869) |
+| Browser-based visual review | [UI structure](app/static/index.html) · [waveform and comparison logic](app/static/app.js) |
+| GPU-aware execution model | [Single-worker design](docs/ARCHITECTURE.md#job-execution) |
+| Local runtime and operating guidance | [Dockerfile](Dockerfile) · [runner](run.ps1) · [operations guide](docs/OPERATIONS.md) |
+
 Film Subtitle Lab takes a media file plus an optional broken `.srt`/`.vtt`, transcribes the audio, uses the word-level timeline as a timing source, and produces a new repaired subtitle file that preserves the original subtitle text whenever possible. The UI makes the repair visible with a waveform, timing lanes, cue-by-cue shift badges, and word-level timestamps.
 
 The app is designed for a Windows workstation with an NVIDIA RTX GPU, Docker Desktop, and CUDA-enabled containers. It provides a local browser UI, a FastAPI backend, persistent model/job storage, and an optional Cloudflare Quick Tunnel so the UI can be used remotely from another machine.
