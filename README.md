@@ -2,6 +2,20 @@
 
 GPU-accelerated web app for repairing broken subtitle timing with WhisperX or ElevenLabs word timestamps.
 
+> **Portfolio snapshot:** local-first subtitle-repair prototype for a
+> Windows/NVIDIA workstation. It combines WhisperX or ElevenLabs word
+> timestamps with a FastAPI review UI to repair subtitle timing while
+> preserving uploaded subtitle text where alignment succeeds.
+>
+> **Stack:** Python · FastAPI · Docker · CUDA · WhisperX · ElevenLabs ·
+> Vanilla JavaScript
+>
+> **Docs:** [Architecture](docs/ARCHITECTURE.md) ·
+> [Operations](docs/OPERATIONS.md)
+>
+> **Deployment note:** no public hosted demo or media artifacts are included;
+> the app is intended to run locally on a GPU workstation.
+
 Film Subtitle Lab takes a media file plus an optional broken `.srt`/`.vtt`, transcribes the audio, uses the word-level timeline as a timing source, and produces a new repaired subtitle file that preserves the original subtitle text whenever possible. The UI makes the repair visible with a waveform, timing lanes, cue-by-cue shift badges, and word-level timestamps.
 
 The app is designed for a Windows workstation with an NVIDIA RTX GPU, Docker Desktop, and CUDA-enabled containers. It provides a local browser UI, a FastAPI backend, persistent model/job storage, and an optional Cloudflare Quick Tunnel so the UI can be used remotely from another machine.
